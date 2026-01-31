@@ -2,10 +2,13 @@ package com.example.transai.data.parser
 
 import com.example.transai.data.model.Book
 import com.example.transai.data.model.Chapter
+import com.example.transai.data.processor.SmartParagraphSplitter
 import com.example.transai.platform.ZipArchive
 import com.fleeksoft.ksoup.Ksoup
 
 class EpubParser {
+    private val splitter = SmartParagraphSplitter()
+
     fun parse(filePath: String): Book {
         val zip = ZipArchive(filePath)
         try {
@@ -101,8 +104,10 @@ class EpubParser {
 
     private fun splitToParagraphs(text: String): List<String> {
         // Split by double newline which we inserted
-        return text.split("\n\n")
+        val rawParagraphs = text.split("\n\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+        
+        return splitter.process(rawParagraphs)
     }
 }
