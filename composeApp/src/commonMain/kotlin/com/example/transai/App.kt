@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.transai.ui.ReaderScreen
 import com.example.transai.ui.SettingsScreen
+import com.example.transai.ui.rememberFilePicker
 import com.example.transai.viewmodel.ReaderViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,6 +26,10 @@ fun App() {
     MaterialTheme {
         val viewModel = viewModel { ReaderViewModel() }
         var showSettings by remember { mutableStateOf(false) }
+        
+        val pickFile = rememberFilePicker { path ->
+            viewModel.loadFile(path)
+        }
 
         Scaffold(
             topBar = {
@@ -32,6 +37,9 @@ fun App() {
                     title = { Text("TransAI Reader") },
                     actions = {
                         if (!showSettings) {
+                            TextButton(onClick = { pickFile() }) {
+                                Text("Open")
+                            }
                             TextButton(onClick = { showSettings = true }) {
                                 Text("Settings")
                             }

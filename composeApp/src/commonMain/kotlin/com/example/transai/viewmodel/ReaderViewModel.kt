@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.transai.data.SettingsRepository
 import com.example.transai.data.TranslationService
+import com.example.transai.data.parser.BookParserImpl
 import com.example.transai.model.Paragraph
 import com.example.transai.model.TranslationConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +18,7 @@ import kotlinx.coroutines.launch
 class ReaderViewModel : ViewModel() {
     private val settingsRepository = SettingsRepository()
     private val translationService = TranslationService()
+    private val bookParser = BookParserImpl()
 
     private val _paragraphs = MutableStateFlow<List<Paragraph>>(emptyList())
     val paragraphs: StateFlow<List<Paragraph>> = _paragraphs.asStateFlow()
@@ -35,6 +39,27 @@ class ReaderViewModel : ViewModel() {
         viewModelScope.launch {
             settingsRepository.config.collectLatest {
                 _config.value = it
+            }
+        }
+    }
+
+    fun loadFile(path: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val book = bookParser.parse(path)
+                val allParagraphs = book.chapters.flatMap { chapter ->
+                    chapter.paragraphs
+                }
+                
+                val mappedParagraphs = allParagraphs.mapIndexed { index, text ->
+                    Paragraph(id = index, originalText = text.trim())
+                }
+                
+                _paragraphs.value = mappedParagraphs
+            } catch (e: Exception) {
+                // TODO: Handle error state in UI
+                println("Error loading book: ${e.message}")
+                e.printStackTrace()
             }
         }
     }

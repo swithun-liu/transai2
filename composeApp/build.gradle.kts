@@ -51,6 +51,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.multiplatform.settings)
             implementation(libs.multiplatform.settings.no.arg)
+            implementation(libs.ksoup)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
