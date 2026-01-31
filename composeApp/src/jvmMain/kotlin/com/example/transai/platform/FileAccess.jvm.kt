@@ -24,3 +24,10 @@ actual class ZipArchive actual constructor(filePath: String) {
         return zipFile?.entries()?.asSequence()?.map { it.name }?.toList() ?: emptyList()
     }
 }
+
+actual fun saveTempFile(name: String, content: ByteArray): String {
+    val tempDir = File(System.getProperty("java.io.tmpdir") ?: ".")
+    val file = File(tempDir, name)
+    file.writeBytes(content)
+    return file.absolutePath
+}

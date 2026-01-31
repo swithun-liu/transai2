@@ -5,3 +5,5 @@ expect class ZipArchive(filePath: String) {
     fun getEntry(name: String): ByteArray?
     fun entryNames(): List<String>
 }
+
+expect fun saveTempFile(name: String, content: ByteArray): String

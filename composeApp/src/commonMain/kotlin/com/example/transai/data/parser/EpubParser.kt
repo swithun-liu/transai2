@@ -87,14 +87,15 @@ class EpubParser {
 
     private fun parseHtmlToText(html: String): String {
         val doc = Ksoup.parse(html)
-        // Extract paragraphs.
-        // We select <p> tags to ensure we get proper paragraph breaks.
-        // Simply doc.text() might merge lines too aggressively.
-        val paragraphs = doc.select("p").eachText()
-        if (paragraphs.isNotEmpty()) {
-            return paragraphs.joinToString("\n\n")
+        // Extract paragraphs and headers.
+        // We select <p> and <h1-6> tags to ensure we get proper structure.
+        val elements = doc.select("h1, h2, h3, h4, h5, h6, p")
+        val texts = elements.eachText()
+        
+        if (texts.isNotEmpty()) {
+            return texts.joinToString("\n\n")
         }
-        // Fallback if no p tags (e.g. div soup)
+        // Fallback if no specific tags (e.g. div soup)
         return doc.body().text()
     }
 
