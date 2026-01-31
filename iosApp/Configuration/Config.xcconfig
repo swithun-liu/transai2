@@ -1,3 +1,6 @@
+// 签名需要 Team ID。
+// 你可以在 Apple Developer Portal 中找到你的 Team ID。
+// 如果使用个人账号，可以在 Xcode 的 "Signing & Capabilities" 选项卡中查看，或者运行 `xcodebuild -showBuildSettings` 查看。
 TEAM_ID=
 
 PRODUCT_NAME=Transai
