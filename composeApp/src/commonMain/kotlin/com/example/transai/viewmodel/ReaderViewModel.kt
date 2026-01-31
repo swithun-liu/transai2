@@ -62,8 +62,8 @@ class ReaderViewModel : ViewModel() {
                     currentList[index] = p.copy(isExpanded = true)
                     _paragraphs.value = currentList
                 } else {
-                    // Need translation
-                    currentList[index] = p.copy(isExpanded = true, isLoading = true)
+                    // Need translation (or retry if previous attempt failed)
+                    currentList[index] = p.copy(isExpanded = true, isLoading = true, error = null)
                     _paragraphs.value = currentList
                     translateParagraph(id, p.originalText)
                 }
@@ -73,15 +73,24 @@ class ReaderViewModel : ViewModel() {
 
     private fun translateParagraph(id: Int, text: String) {
         viewModelScope.launch {
-            val translation = translationService.translate(text, _config.value)
+            val result = translationService.translate(text, _config.value)
             
             val currentList = _paragraphs.value.toMutableList()
             val index = currentList.indexOfFirst { it.id == id }
             if (index != -1) {
-                currentList[index] = currentList[index].copy(
-                    translatedText = translation,
-                    isLoading = false
-                )
+                val updatedParagraph = if (result.isSuccess) {
+                    currentList[index].copy(
+                        translatedText = result.getOrNull(),
+                        isLoading = false,
+                        error = null
+                    )
+                } else {
+                    currentList[index].copy(
+                        isLoading = false,
+                        error = result.exceptionOrNull()?.message ?: "Unknown error"
+                    )
+                }
+                currentList[index] = updatedParagraph
                 _paragraphs.value = currentList
             }
         }

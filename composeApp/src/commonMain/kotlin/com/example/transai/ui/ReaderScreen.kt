@@ -101,6 +101,13 @@ fun ParagraphItem(paragraph: Paragraph, onClick: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                } else if (paragraph.error != null) {
+                    Text(
+                        text = paragraph.error,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    )
                 } else {
                     Text(
                         text = paragraph.translatedText ?: "Translation not available",

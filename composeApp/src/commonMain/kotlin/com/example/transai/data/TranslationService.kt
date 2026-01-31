@@ -23,8 +23,10 @@ class TranslationService {
         }
     }
 
-    suspend fun translate(text: String, config: TranslationConfig): String {
-        if (config.apiKey.isBlank()) return "Please set API Key in settings."
+    suspend fun translate(text: String, config: TranslationConfig): Result<String> {
+        if (config.apiKey.isBlank()) {
+            return Result.failure(Exception("Please set API Key in settings."))
+        }
         
         try {
             val requestBody = ChatCompletionRequest(
@@ -45,10 +47,15 @@ class TranslationService {
                 setBody(requestBody)
             }.body()
 
-            return response.choices.firstOrNull()?.message?.content?.trim() ?: "Translation failed."
+            val content = response.choices.firstOrNull()?.message?.content?.trim()
+            return if (content != null) {
+                Result.success(content)
+            } else {
+                Result.failure(Exception("Translation failed: Empty response."))
+            }
         } catch (e: Exception) {
             e.printStackTrace()
-            return "Error: ${e.message}"
+            return Result.failure(e)
         }
     }
 }
