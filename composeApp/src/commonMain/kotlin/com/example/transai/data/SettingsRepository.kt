@@ -27,4 +27,12 @@ class SettingsRepository {
         settings["model_name"] = newConfig.model
         _config.value = newConfig
     }
+
+    fun getApiKeyForProvider(provider: String): String {
+        return settings.getString("api_key_$provider", "")
+    }
+
+    fun saveApiKeyForProvider(provider: String, apiKey: String) {
+        settings["api_key_$provider"] = apiKey
+    }
 }

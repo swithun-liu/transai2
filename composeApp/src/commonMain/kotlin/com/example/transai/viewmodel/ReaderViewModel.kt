@@ -163,4 +163,12 @@ class ReaderViewModel(
     private fun updateConfig(event: ReaderUiEvent.UpdateConfig) {
         updateSettingsUseCase(event.config)
     }
+
+    fun getApiKeyForProvider(provider: String): String {
+        return getSettingsUseCase.getApiKeyForProvider(provider)
+    }
+
+    fun saveApiKeyForProvider(provider: String, apiKey: String) {
+        updateSettingsUseCase.saveApiKeyForProvider(provider, apiKey)
+    }
 }

@@ -32,6 +32,14 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val config = uiState.config
     
+    // Determine initial provider
+    val initialProvider = remember(config.model) { 
+        ModelProvider.fromModel(config.model) ?: ModelProvider.OpenAI 
+    }
+    
+    // Track selected provider to manage API keys
+    var selectedProvider by remember(config) { mutableStateOf(initialProvider) }
+    
     // Local state for editing
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
     var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
@@ -93,8 +101,10 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             }
                         },
                         onClick = {
+                            selectedProvider = provider
                             model = provider.defaultModel
                             baseUrl = provider.defaultBaseUrl
+                            apiKey = viewModel.getApiKeyForProvider(provider.name)
                             isModelDropdownExpanded = false
                         }
                     )
@@ -116,6 +126,7 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
         Button(
             onClick = {
+                viewModel.saveApiKeyForProvider(selectedProvider.name, apiKey)
                 viewModel.onEvent(
                     ReaderUiEvent.UpdateConfig(
                         TranslationConfig(apiKey, baseUrl, model)

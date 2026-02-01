@@ -10,4 +10,8 @@ class GetSettingsUseCase(
     operator fun invoke(): Flow<TranslationConfig> {
         return repository.config
     }
+
+    fun getApiKeyForProvider(provider: String): String {
+        return repository.getApiKeyForProvider(provider)
+    }
 }

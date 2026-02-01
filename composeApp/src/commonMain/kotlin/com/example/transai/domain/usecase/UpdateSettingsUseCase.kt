@@ -9,4 +9,8 @@ class UpdateSettingsUseCase(
     operator fun invoke(config: TranslationConfig) {
         repository.saveConfig(config)
     }
+
+    fun saveApiKeyForProvider(provider: String, apiKey: String) {
+        repository.saveApiKeyForProvider(provider, apiKey)
+    }
 }
