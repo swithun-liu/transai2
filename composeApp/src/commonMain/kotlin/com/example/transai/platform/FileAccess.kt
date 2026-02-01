@@ -10,6 +10,8 @@ expect fun saveTempFile(name: String, content: ByteArray): String
 
 expect fun saveBookToSandbox(sourcePath: String): String
 
+expect fun deleteFile(path: String): Boolean
+
 expect fun openInExplorer(path: String)
 
 

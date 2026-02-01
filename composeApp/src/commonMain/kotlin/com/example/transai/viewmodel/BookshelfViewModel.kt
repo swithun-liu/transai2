@@ -7,6 +7,7 @@ import com.example.transai.data.model.BookMetadata
 import com.example.transai.domain.usecase.ParseBookUseCase
 import com.example.transai.platform.saveTempFile
 import com.example.transai.platform.saveBookToSandbox
+import com.example.transai.platform.deleteFile
 import com.example.transai.platform.openInExplorer
 import kotlinx.coroutines.Dispatchers
 
@@ -72,6 +73,15 @@ class BookshelfViewModel(
     }
 
     fun removeBook(path: String) {
-        bookRepository.removeBook(path)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Try to delete physical file first
+                deleteFile(path)
+            } catch (e: Exception) {
+                println("Error deleting file: ${e.message}")
+            }
+            // Remove from repository (UI) regardless of file deletion success
+            bookRepository.removeBook(path)
+        }
     }
 }

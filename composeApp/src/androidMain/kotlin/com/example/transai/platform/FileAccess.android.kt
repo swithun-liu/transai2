@@ -52,6 +52,15 @@ actual fun saveBookToSandbox(sourcePath: String): String {
     return destFile.absolutePath
 }
 
+actual fun deleteFile(path: String): Boolean {
+    val file = File(path)
+    return if (file.exists()) {
+        file.delete()
+    } else {
+        false
+    }
+}
+
 actual fun openInExplorer(path: String) {
     val context = TransAIApplication.appContext ?: return
     try {

@@ -57,6 +57,14 @@ actual fun saveBookToSandbox(sourcePath: String): String {
     return sourcePath
 }
 
+actual fun deleteFile(path: String): Boolean {
+    val fileManager = NSFileManager.defaultManager
+    if (fileManager.fileExistsAtPath(path)) {
+        return fileManager.removeItemAtPath(path, null)
+    }
+    return false
+}
+
 actual fun openInExplorer(path: String) {
     // Not supported on iOS
     println("Open in explorer requested for: $path")
