@@ -9,7 +9,7 @@ package com.example.transai.data.processor
  * 3. Improving the granularity of "Click to Translate".
  */
 class SmartParagraphSplitter(
-    private val maxParagraphLength: Int = 1000
+    private val maxParagraphLength: Int = 300
 ) {
     /**
      * Process a list of raw paragraphs and return a refined list.

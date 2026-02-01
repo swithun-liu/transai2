@@ -7,7 +7,8 @@ import com.example.transai.platform.ZipArchive
 import com.fleeksoft.ksoup.Ksoup
 
 class EpubParser {
-    private val splitter = SmartParagraphSplitter()
+    // 300 chars is a good balance for mobile screens and translation context
+    private val splitter = SmartParagraphSplitter(maxParagraphLength = 300)
 
     fun parse(filePath: String): Book {
         val zip = ZipArchive(filePath)
