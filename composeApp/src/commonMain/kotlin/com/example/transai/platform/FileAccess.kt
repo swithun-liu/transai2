@@ -7,3 +7,9 @@ expect class ZipArchive(filePath: String) {
 }
 
 expect fun saveTempFile(name: String, content: ByteArray): String
+
+expect fun saveBookToSandbox(sourcePath: String): String
+
+expect fun openInExplorer(path: String)
+
+

@@ -31,3 +31,29 @@ actual fun saveTempFile(name: String, content: ByteArray): String {
     file.writeBytes(content)
     return file.absolutePath
 }
+
+actual fun saveBookToSandbox(sourcePath: String): String {
+    val userHome = System.getProperty("user.home")
+    val booksDir = File(userHome, ".transai/books")
+    if (!booksDir.exists()) booksDir.mkdirs()
+    
+    val sourceFile = File(sourcePath)
+    val destFile = File(booksDir, sourceFile.name)
+    
+    sourceFile.copyTo(destFile, overwrite = true)
+    
+    return destFile.absolutePath
+}
+
+actual fun openInExplorer(path: String) {
+    try {
+        val file = File(path)
+        val parent = file.parentFile
+        if (parent != null && parent.exists()) {
+            java.awt.Desktop.getDesktop().open(parent)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
