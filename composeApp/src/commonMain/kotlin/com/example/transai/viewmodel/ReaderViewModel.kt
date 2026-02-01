@@ -2,11 +2,11 @@ package com.example.transai.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.transai.data.SettingsRepository
-import com.example.transai.data.TranslationService
-import com.example.transai.data.parser.BookParserImpl
+import com.example.transai.domain.usecase.GetSettingsUseCase
+import com.example.transai.domain.usecase.ParseBookUseCase
+import com.example.transai.domain.usecase.TranslateParagraphUseCase
+import com.example.transai.domain.usecase.UpdateSettingsUseCase
 import com.example.transai.model.Paragraph
-import com.example.transai.model.TranslationConfig
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -14,34 +14,48 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import transai.composeapp.generated.resources.Res
 
-class ReaderViewModel : ViewModel() {
-    private val settingsRepository = SettingsRepository()
-    private val translationService = TranslationService()
-    private val bookParser = BookParserImpl()
+class ReaderViewModel(
+    private val getSettingsUseCase: GetSettingsUseCase = GetSettingsUseCase(),
+    private val updateSettingsUseCase: UpdateSettingsUseCase = UpdateSettingsUseCase(),
+    private val translateParagraphUseCase: TranslateParagraphUseCase = TranslateParagraphUseCase(),
+    private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase()
+) : ViewModel() {
 
-    private val _paragraphs = MutableStateFlow<List<Paragraph>>(emptyList())
-    val paragraphs: StateFlow<List<Paragraph>> = _paragraphs.asStateFlow()
+    private val _uiState = MutableStateFlow(ReaderUiState())
+    val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
-    private val _config = MutableStateFlow(TranslationConfig())
-    val config: StateFlow<TranslationConfig> = _config.asStateFlow()
-    
     init {
-        loadSampleContent()
+        onEvent(ReaderUiEvent.LoadSample)
+        observeSettings()
+    }
+
+    fun onEvent(event: ReaderUiEvent) {
+        when (event) {
+            is ReaderUiEvent.LoadFile -> loadFile(event.path)
+            ReaderUiEvent.LoadSample -> loadSampleContent()
+            is ReaderUiEvent.ToggleTranslation -> toggleTranslation(event.id)
+            is ReaderUiEvent.UpdateConfig -> updateConfig(event)
+        }
+    }
+
+    private fun observeSettings() {
         viewModelScope.launch {
-            settingsRepository.config.collectLatest {
-                _config.value = it
+            getSettingsUseCase().collectLatest { config ->
+                _uiState.update { it.copy(config = config) }
             }
         }
     }
 
-    fun loadFile(path: String) {
+    private fun loadFile(path: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val book = bookParser.parse(path)
+                val book = parseBookUseCase(path)
                 val allParagraphs = book.chapters.flatMap { chapter ->
                     chapter.paragraphs
                 }
@@ -50,9 +64,19 @@ class ReaderViewModel : ViewModel() {
                     Paragraph(id = index, originalText = text.trim())
                 }
                 
-                _paragraphs.value = mappedParagraphs
+                _uiState.update { 
+                    it.copy(
+                        paragraphs = mappedParagraphs,
+                        isLoading = false
+                    )
+                }
             } catch (e: Exception) {
-                // TODO: Handle error state in UI
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        error = "Error loading book: ${e.message}"
+                    )
+                }
                 println("Error loading book: ${e.message}")
                 e.printStackTrace()
             }
@@ -73,25 +97,26 @@ class ReaderViewModel : ViewModel() {
         }
     }
 
-    fun toggleTranslation(id: Int) {
-        val currentList = _paragraphs.value.toMutableList()
+    private fun toggleTranslation(id: Int) {
+        val currentList = _uiState.value.paragraphs.toMutableList()
         val index = currentList.indexOfFirst { it.id == id }
+        
         if (index != -1) {
             val p = currentList[index]
             if (p.isExpanded) {
                 // Collapse
                 currentList[index] = p.copy(isExpanded = false)
-                _paragraphs.value = currentList
+                _uiState.update { it.copy(paragraphs = currentList) }
             } else {
                 // Expand
                 if (p.translatedText != null) {
                     // Already translated, just show
                     currentList[index] = p.copy(isExpanded = true)
-                    _paragraphs.value = currentList
+                    _uiState.update { it.copy(paragraphs = currentList) }
                 } else {
                     // Need translation (or retry if previous attempt failed)
                     currentList[index] = p.copy(isExpanded = true, isLoading = true, error = null)
-                    _paragraphs.value = currentList
+                    _uiState.update { it.copy(paragraphs = currentList) }
                     translateParagraph(id, p.originalText)
                 }
             }
@@ -100,30 +125,33 @@ class ReaderViewModel : ViewModel() {
 
     private fun translateParagraph(id: Int, text: String) {
         viewModelScope.launch {
-            val result = translationService.translate(text, _config.value)
+            val config = _uiState.value.config
+            val result = translateParagraphUseCase(text, config)
             
-            val currentList = _paragraphs.value.toMutableList()
-            val index = currentList.indexOfFirst { it.id == id }
-            if (index != -1) {
-                val updatedParagraph = if (result.isSuccess) {
-                    currentList[index].copy(
-                        translatedText = result.getOrNull(),
-                        isLoading = false,
-                        error = null
-                    )
-                } else {
-                    currentList[index].copy(
-                        isLoading = false,
-                        error = result.exceptionOrNull()?.message ?: "Unknown error"
-                    )
+            _uiState.update { state ->
+                val currentList = state.paragraphs.toMutableList()
+                val index = currentList.indexOfFirst { it.id == id }
+                if (index != -1) {
+                    val updatedParagraph = if (result.isSuccess) {
+                        currentList[index].copy(
+                            translatedText = result.getOrNull(),
+                            isLoading = false,
+                            error = null
+                        )
+                    } else {
+                        currentList[index].copy(
+                            isLoading = false,
+                            error = result.exceptionOrNull()?.message ?: "Unknown error"
+                        )
+                    }
+                    currentList[index] = updatedParagraph
                 }
-                currentList[index] = updatedParagraph
-                _paragraphs.value = currentList
+                state.copy(paragraphs = currentList)
             }
         }
     }
 
-    fun updateConfig(apiKey: String, baseUrl: String, model: String) {
-        settingsRepository.saveConfig(TranslationConfig(apiKey, baseUrl, model))
+    private fun updateConfig(event: ReaderUiEvent.UpdateConfig) {
+        updateSettingsUseCase(event.config)
     }
 }

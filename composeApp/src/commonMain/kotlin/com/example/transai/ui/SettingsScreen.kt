@@ -23,11 +23,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.transai.model.ModelProvider
+import com.example.transai.model.TranslationConfig
+import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 
 @Composable
 fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
-    val config by viewModel.config.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val config = uiState.config
     
     // Local state for editing
     var apiKey by remember(config) { mutableStateOf(config.apiKey) }
@@ -113,7 +116,11 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
         Button(
             onClick = {
-                viewModel.updateConfig(apiKey, baseUrl, model)
+                viewModel.onEvent(
+                    ReaderUiEvent.UpdateConfig(
+                        TranslationConfig(apiKey, baseUrl, model)
+                    )
+                )
                 onBack()
             },
             modifier = Modifier.fillMaxWidth()

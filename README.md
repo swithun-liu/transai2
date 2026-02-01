@@ -61,7 +61,10 @@
 - **UI 框架**: Compose Multiplatform (Android, iOS, Desktop)
 - **网络**: Ktor Client
 - **序列化**: Kotlinx.serialization
-- **架构**: MVVM / Clean Architecture
+- **架构**: MVI (Model-View-Intent) / Clean Architecture
+  - **Presentation**: ViewModel (UiState, UiEvent)
+  - **Domain**: UseCases (Business Logic)
+  - **Data**: Repository & Data Sources
 - **存储**: Multiplatform Settings
 
 ---

@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.transai.ui.ReaderScreen
 import com.example.transai.ui.SettingsScreen
 import com.example.transai.ui.rememberFilePicker
+import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,7 +29,7 @@ fun App() {
         var showSettings by remember { mutableStateOf(false) }
         
         val pickFile = rememberFilePicker { path ->
-            viewModel.loadFile(path)
+            viewModel.onEvent(ReaderUiEvent.LoadFile(path))
         }
 
         Scaffold(

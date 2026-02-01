@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,25 +31,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.transai.model.Paragraph
+import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 
 @Composable
 fun ReaderScreen(viewModel: ReaderViewModel) {
-    val paragraphs by viewModel.paragraphs.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        items(paragraphs) { paragraph ->
-            ParagraphItem(
-                paragraph = paragraph,
-                onClick = { viewModel.toggleTranslation(paragraph.id) }
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (uiState.isLoading && uiState.paragraphs.isEmpty()) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        } else if (uiState.error != null && uiState.paragraphs.isEmpty()) {
+            Text(
+                text = uiState.error!!,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.align(Alignment.Center).padding(16.dp)
             )
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                items(uiState.paragraphs) { paragraph ->
+                    ParagraphItem(
+                        paragraph = paragraph,
+                        onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                    )
+                }
+            }
         }
     }
 }
