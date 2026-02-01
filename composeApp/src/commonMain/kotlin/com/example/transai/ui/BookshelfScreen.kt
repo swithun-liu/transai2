@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -34,6 +35,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -59,6 +61,33 @@ fun BookshelfScreen(
     val books by viewModel.books.collectAsState()
     val pickFile = rememberFilePicker { path ->
         viewModel.addBook(path)
+    }
+
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var bookToDelete by remember { mutableStateOf<BookMetadata?>(null) }
+
+    if (showDeleteDialog && bookToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Book") },
+            text = { Text("Are you sure you want to delete \"${bookToDelete?.title}\"? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        bookToDelete?.let { viewModel.removeBook(it.filePath) }
+                        showDeleteDialog = false
+                        bookToDelete = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -106,7 +135,10 @@ fun BookshelfScreen(
                         BookItem(
                             book = book,
                             onClick = { onBookClick(book.filePath) },
-                            onDelete = { viewModel.removeBook(book.filePath) },
+                            onDelete = { 
+                                bookToDelete = book
+                                showDeleteDialog = true
+                            },
                             onOpenFolder = { viewModel.openBookFolder(book.filePath) }
                         )
                     }
