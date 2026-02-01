@@ -4,7 +4,7 @@ import com.example.transai.data.SettingsRepository
 import com.example.transai.model.TranslationConfig
 
 class UpdateSettingsUseCase(
-    private val repository: SettingsRepository = SettingsRepository()
+    private val repository: SettingsRepository = SettingsRepository
 ) {
     operator fun invoke(config: TranslationConfig) {
         repository.saveConfig(config)

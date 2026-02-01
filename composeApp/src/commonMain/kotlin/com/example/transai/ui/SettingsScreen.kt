@@ -101,6 +101,9 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             }
                         },
                         onClick = {
+                            // Save current apiKey for the current provider before switching
+                            viewModel.saveApiKeyForProvider(selectedProvider.name, apiKey)
+                            
                             selectedProvider = provider
                             model = provider.defaultModel
                             baseUrl = provider.defaultBaseUrl

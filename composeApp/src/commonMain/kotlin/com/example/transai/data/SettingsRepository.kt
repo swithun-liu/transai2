@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SettingsRepository {
+object SettingsRepository {
     private val settings = Settings()
     
     private val _config = MutableStateFlow(loadConfig())

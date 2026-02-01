@@ -5,7 +5,7 @@ import com.example.transai.model.TranslationConfig
 import kotlinx.coroutines.flow.Flow
 
 class GetSettingsUseCase(
-    private val repository: SettingsRepository = SettingsRepository()
+    private val repository: SettingsRepository = SettingsRepository
 ) {
     operator fun invoke(): Flow<TranslationConfig> {
         return repository.config
