@@ -56,8 +56,17 @@ class ReaderViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val book = parseBookUseCase(path)
-                val allParagraphs = book.chapters.flatMap { chapter ->
-                    chapter.paragraphs
+                
+                val chaptersInfo = mutableListOf<ChapterInfo>()
+                var currentIndex = 0
+                val allParagraphs = mutableListOf<String>()
+
+                book.chapters.forEach { chapter ->
+                    if (chapter.paragraphs.isNotEmpty()) {
+                        chaptersInfo.add(ChapterInfo(chapter.title, currentIndex))
+                        allParagraphs.addAll(chapter.paragraphs)
+                        currentIndex += chapter.paragraphs.size
+                    }
                 }
                 
                 val mappedParagraphs = allParagraphs.mapIndexed { index, text ->
@@ -67,6 +76,7 @@ class ReaderViewModel(
                 _uiState.update { 
                     it.copy(
                         paragraphs = mappedParagraphs,
+                        chapters = chaptersInfo,
                         isLoading = false
                     )
                 }

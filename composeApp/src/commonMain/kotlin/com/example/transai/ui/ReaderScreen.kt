@@ -19,13 +19,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,34 +45,76 @@ import androidx.compose.ui.unit.sp
 import com.example.transai.model.Paragraph
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ReaderScreen(viewModel: ReaderViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (uiState.isLoading && uiState.paragraphs.isEmpty()) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else if (uiState.error != null && uiState.paragraphs.isEmpty()) {
-            Text(
-                text = uiState.error!!,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.align(Alignment.Center).padding(16.dp)
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                items(uiState.paragraphs) { paragraph ->
-                    ParagraphItem(
-                        paragraph = paragraph,
-                        onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                    )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Text(
+                    "Table of Contents",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                HorizontalDivider()
+                LazyColumn {
+                    items(uiState.chapters) { chapter ->
+                        NavigationDrawerItem(
+                            label = { Text(chapter.title) },
+                            selected = false,
+                            onClick = {
+                                scope.launch {
+                                    listState.scrollToItem(chapter.startIndex)
+                                    drawerState.close()
+                                }
+                            },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        )
+                    }
+                }
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (uiState.isLoading && uiState.paragraphs.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (uiState.error != null && uiState.paragraphs.isEmpty()) {
+                Text(
+                    text = uiState.error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp)
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    items(uiState.paragraphs) { paragraph ->
+                        ParagraphItem(
+                            paragraph = paragraph,
+                            onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+                    }
+                }
+
+                // FAB to open drawer
+                FloatingActionButton(
+                    onClick = { scope.launch { drawerState.open() } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Menu, contentDescription = "Menu")
                 }
             }
         }

@@ -3,8 +3,14 @@ package com.example.transai.viewmodel
 import com.example.transai.model.Paragraph
 import com.example.transai.model.TranslationConfig
 
+data class ChapterInfo(
+    val title: String,
+    val startIndex: Int
+)
+
 data class ReaderUiState(
     val paragraphs: List<Paragraph> = emptyList(),
+    val chapters: List<ChapterInfo> = emptyList(),
     val config: TranslationConfig = TranslationConfig(),
     val isLoading: Boolean = false,
     val error: String? = null

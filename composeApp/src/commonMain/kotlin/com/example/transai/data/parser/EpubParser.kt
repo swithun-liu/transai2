@@ -28,17 +28,20 @@ class EpubParser {
             val (metadata, spine) = parseOpf(opfContent)
             
             // 3. Extract chapters
-            val chapters = spine.mapNotNull { itemPath ->
+            val chapters = spine.mapIndexedNotNull { index, itemPath ->
                 // OPF path relative resolution
                 val fullPath = resolvePath(opfPath, itemPath)
                 val htmlEntry = zip.getEntry(fullPath)
                 
                 if (htmlEntry != null) {
                     val htmlContent = htmlEntry.decodeToString()
+                    val extractedTitle = extractChapterTitle(htmlContent)
+                    val title = if (extractedTitle.isNullOrBlank()) "Chapter ${index + 1}" else extractedTitle
+                    
                     val text = parseHtmlToText(htmlContent)
                     val paragraphs = splitToParagraphs(text)
                     // Use file name or header as title for now
-                    Chapter("Chapter", text, paragraphs)
+                    Chapter(title, text, paragraphs)
                 } else {
                     println("Warning: Missing chapter file $fullPath")
                     null
@@ -87,6 +90,18 @@ class EpubParser {
         val parent = basePath.substringBeforeLast('/', "")
         if (parent.isEmpty()) return relativePath
         return "$parent/$relativePath"
+    }
+
+    private fun extractChapterTitle(html: String): String? {
+        val doc = Ksoup.parse(html)
+        // Try h1, h2, h3 first as they are most likely chapter titles within the content
+        val header = doc.select("h1, h2, h3").firstOrNull()
+        if (header != null && header.text().isNotBlank()) {
+            return header.text()
+        }
+        // Fallback to title tag
+        val titleTag = doc.select("title").firstOrNull()
+        return titleTag?.text()
     }
 
     private fun parseHtmlToText(html: String): String {
