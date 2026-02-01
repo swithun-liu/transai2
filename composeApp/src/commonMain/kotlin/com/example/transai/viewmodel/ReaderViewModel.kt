@@ -30,7 +30,6 @@ class ReaderViewModel(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     init {
-        onEvent(ReaderUiEvent.LoadSample)
         observeSettings()
     }
 

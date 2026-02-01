@@ -21,18 +21,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -47,8 +52,9 @@ import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReaderScreen(viewModel: ReaderViewModel) {
+fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -82,39 +88,52 @@ fun ReaderScreen(viewModel: ReaderViewModel) {
             }
         }
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (uiState.isLoading && uiState.paragraphs.isEmpty()) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.error != null && uiState.paragraphs.isEmpty()) {
-                Text(
-                    text = uiState.error!!,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp)
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-                    contentPadding = PaddingValues(16.dp)
-                ) {
-                    items(uiState.paragraphs) { paragraph ->
-                        ParagraphItem(
-                            paragraph = paragraph,
-                            onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                        )
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Reader") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
                     }
-                }
+                )
+            }
+        ) { paddingValues ->
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                if (uiState.isLoading && uiState.paragraphs.isEmpty()) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                } else if (uiState.error != null && uiState.paragraphs.isEmpty()) {
+                    Text(
+                        text = uiState.error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+                        contentPadding = PaddingValues(16.dp)
+                    ) {
+                        items(uiState.paragraphs) { paragraph ->
+                            ParagraphItem(
+                                paragraph = paragraph,
+                                onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                            )
+                        }
+                    }
 
-                // FAB to open drawer
-                FloatingActionButton(
-                    onClick = { scope.launch { drawerState.open() } },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-                ) {
-                    Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    // FAB to open drawer
+                    FloatingActionButton(
+                        onClick = { scope.launch { drawerState.open() } },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                    ) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
                 }
             }
         }
