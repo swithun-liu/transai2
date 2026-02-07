@@ -1,0 +1,15 @@
+CREATE TABLE translation (
+    bookPath TEXT NOT NULL,
+    paragraphId INTEGER NOT NULL,
+    translatedText TEXT NOT NULL,
+    PRIMARY KEY (bookPath, paragraphId)
+);
+
+selectByBook:
+SELECT * FROM translation WHERE bookPath = ?;
+
+selectOne:
+SELECT translatedText FROM translation WHERE bookPath = ? AND paragraphId = ?;
+
+insertOrReplace:
+INSERT OR REPLACE INTO translation(bookPath, paragraphId, translatedText) VALUES (?, ?, ?);

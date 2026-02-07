@@ -8,6 +8,7 @@ import com.example.transai.domain.usecase.TranslateParagraphUseCase
 import com.example.transai.domain.usecase.UpdateSettingsUseCase
 import com.example.transai.domain.usecase.GetBookMetadataUseCase
 import com.example.transai.domain.usecase.UpdateBookProgressUseCase
+import com.example.transai.data.TranslationRepository
 import com.example.transai.model.Paragraph
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,12 @@ class ReaderViewModel(
                 }
                 
                 val mappedParagraphs = allParagraphs.mapIndexed { index, text ->
-                    Paragraph(id = index, originalText = text.trim())
+                    val cachedTranslation = TranslationRepository.getTranslation(path, index)
+                    Paragraph(
+                        id = index, 
+                        originalText = text.trim(),
+                        translatedText = cachedTranslation
+                    )
                 }
                 
                 _uiState.update { 
@@ -153,6 +159,7 @@ class ReaderViewModel(
     }
 
     private fun translateParagraph(id: Int, text: String) {
+        val path = currentFilePath ?: return
         viewModelScope.launch {
             val config = _uiState.value.config
             val result = translateParagraphUseCase(text, config)
@@ -162,8 +169,12 @@ class ReaderViewModel(
                 val index = currentList.indexOfFirst { it.id == id }
                 if (index != -1) {
                     val updatedParagraph = if (result.isSuccess) {
+                        val translated = result.getOrNull()
+                        if (translated != null) {
+                            TranslationRepository.saveTranslation(path, id, translated)
+                        }
                         currentList[index].copy(
-                            translatedText = result.getOrNull(),
+                            translatedText = translated,
                             isLoading = false,
                             error = null
                         )
