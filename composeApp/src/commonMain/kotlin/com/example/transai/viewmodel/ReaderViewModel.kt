@@ -6,6 +6,8 @@ import com.example.transai.domain.usecase.GetSettingsUseCase
 import com.example.transai.domain.usecase.ParseBookUseCase
 import com.example.transai.domain.usecase.TranslateParagraphUseCase
 import com.example.transai.domain.usecase.UpdateSettingsUseCase
+import com.example.transai.domain.usecase.GetBookMetadataUseCase
+import com.example.transai.domain.usecase.UpdateBookProgressUseCase
 import com.example.transai.model.Paragraph
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
@@ -23,11 +25,15 @@ class ReaderViewModel(
     private val getSettingsUseCase: GetSettingsUseCase = GetSettingsUseCase(),
     private val updateSettingsUseCase: UpdateSettingsUseCase = UpdateSettingsUseCase(),
     private val translateParagraphUseCase: TranslateParagraphUseCase = TranslateParagraphUseCase(),
-    private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase()
+    private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase(),
+    private val getBookMetadataUseCase: GetBookMetadataUseCase = GetBookMetadataUseCase(),
+    private val updateBookProgressUseCase: UpdateBookProgressUseCase = UpdateBookProgressUseCase()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReaderUiState())
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
+    
+    private var currentFilePath: String? = null
 
     init {
         observeSettings()
@@ -39,6 +45,7 @@ class ReaderViewModel(
             ReaderUiEvent.LoadSample -> loadSampleContent()
             is ReaderUiEvent.ToggleTranslation -> toggleTranslation(event.id)
             is ReaderUiEvent.UpdateConfig -> updateConfig(event)
+            is ReaderUiEvent.SaveProgress -> saveProgress(event.index)
         }
     }
 
@@ -51,9 +58,21 @@ class ReaderViewModel(
     }
 
     private fun loadFile(path: String) {
+        currentFilePath = path
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { 
+                it.copy(
+                    isLoading = true, 
+                    error = null,
+                    paragraphs = emptyList(),
+                    chapters = emptyList(),
+                    initialScrollIndex = 0
+                ) 
+            }
             try {
+                val metadata = getBookMetadataUseCase(path)
+                val initialIndex = metadata?.lastReadPosition ?: 0
+
                 val book = parseBookUseCase(path)
                 
                 val chaptersInfo = mutableListOf<ChapterInfo>()
@@ -76,17 +95,18 @@ class ReaderViewModel(
                     it.copy(
                         paragraphs = mappedParagraphs,
                         chapters = chaptersInfo,
-                        isLoading = false
+                        isLoading = false,
+                        initialScrollIndex = initialIndex
                     )
                 }
             } catch (e: Exception) {
+                println("ReaderViewModel: loadFile error=${e.message}")
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
                         error = "Error loading book: ${e.message}"
                     )
                 }
-                println("Error loading book: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -162,6 +182,16 @@ class ReaderViewModel(
 
     private fun updateConfig(event: ReaderUiEvent.UpdateConfig) {
         updateSettingsUseCase(event.config)
+    }
+
+    private fun saveProgress(index: Int) {
+        val path = currentFilePath ?: return
+        val total = _uiState.value.paragraphs.size
+        if (total > 0) {
+            viewModelScope.launch(Dispatchers.IO) {
+                updateBookProgressUseCase(path, index, total)
+            }
+        }
     }
 
     fun getApiKeyForProvider(provider: String): String {

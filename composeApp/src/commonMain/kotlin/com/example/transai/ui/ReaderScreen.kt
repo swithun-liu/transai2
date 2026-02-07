@@ -40,8 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.example.transai.model.Paragraph
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +64,32 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+
+    // Restore scroll position
+    LaunchedEffect(uiState.initialScrollIndex, uiState.paragraphs) {
+        if (uiState.paragraphs.isNotEmpty() && uiState.initialScrollIndex > 0) {
+            listState.scrollToItem(uiState.initialScrollIndex)
+        }
+    }
+
+    // Save progress
+    val firstVisibleIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+    LaunchedEffect(firstVisibleIndex) {
+        if (uiState.paragraphs.isNotEmpty()) {
+            delay(500)
+            viewModel.onEvent(ReaderUiEvent.SaveProgress(firstVisibleIndex))
+        }
+    }
+
+    // Save on exit
+    DisposableEffect(Unit) {
+        onDispose {
+            val currentIndex = listState.firstVisibleItemIndex
+            if (uiState.paragraphs.isNotEmpty() && currentIndex > 0) {
+                 viewModel.onEvent(ReaderUiEvent.SaveProgress(currentIndex))
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,

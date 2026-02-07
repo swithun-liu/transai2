@@ -20,7 +20,7 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 import transai.composeapp.generated.resources.Res
 
 class BookshelfViewModel(
-    private val bookRepository: BookRepository = BookRepository(),
+    private val bookRepository: BookRepository = BookRepository,
     private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase()
 ) : ViewModel() {
 

@@ -185,6 +185,17 @@ fun BookItem(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                
+                if (book.totalParagraphs > 0) {
+                    val progress = (book.lastReadPosition.toFloat() / book.totalParagraphs * 100).toInt()
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Progress: $progress%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = book.filePath,

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-class BookRepository {
+object BookRepository {
     private val settings = Settings()
     private val json = Json { ignoreUnknownKeys = true }
     private val booksKey = "saved_books"
@@ -43,6 +43,23 @@ class BookRepository {
         val currentBooks = _books.value.toMutableList()
         currentBooks.removeAll { it.filePath == path }
         saveBooks(currentBooks)
+    }
+
+    fun updateProgress(path: String, position: Int, total: Int) {
+        val currentBooks = _books.value.toMutableList()
+        val index = currentBooks.indexOfFirst { it.filePath == path }
+        if (index != -1) {
+            val book = currentBooks[index]
+            currentBooks[index] = book.copy(
+                lastReadPosition = position,
+                totalParagraphs = total
+            )
+            saveBooks(currentBooks)
+        }
+    }
+
+    fun getBook(path: String): BookMetadata? {
+        return _books.value.find { it.filePath == path }
     }
 
     private fun saveBooks(books: List<BookMetadata>) {

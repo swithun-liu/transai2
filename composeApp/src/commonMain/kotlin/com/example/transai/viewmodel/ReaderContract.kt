@@ -13,7 +13,8 @@ data class ReaderUiState(
     val chapters: List<ChapterInfo> = emptyList(),
     val config: TranslationConfig = TranslationConfig(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val initialScrollIndex: Int = 0
 )
 
 sealed interface ReaderUiEvent {
@@ -21,6 +22,7 @@ sealed interface ReaderUiEvent {
     data object LoadSample : ReaderUiEvent
     data class ToggleTranslation(val id: Int) : ReaderUiEvent
     data class UpdateConfig(val config: TranslationConfig) : ReaderUiEvent
+    data class SaveProgress(val index: Int) : ReaderUiEvent
 }
 
 sealed interface ReaderUiEffect {
