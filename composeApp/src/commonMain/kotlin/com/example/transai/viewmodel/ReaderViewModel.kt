@@ -89,11 +89,12 @@ class ReaderViewModel(
                 }
                 
                 val mappedParagraphs = allParagraphs.mapIndexed { index, text ->
-                    val cachedTranslation = TranslationRepository.getTranslation(path, index)
+                    val translationState = TranslationRepository.getTranslationState(path, index)
                     Paragraph(
                         id = index, 
                         originalText = text.trim(),
-                        translatedText = cachedTranslation
+                        translatedText = translationState?.translatedText,
+                        isExpanded = translationState?.isExpanded == 1L
                     )
                 }
                 
@@ -133,26 +134,38 @@ class ReaderViewModel(
     }
 
     private fun toggleTranslation(id: Int) {
+        val path = currentFilePath ?: return
         val currentList = _uiState.value.paragraphs.toMutableList()
         val index = currentList.indexOfFirst { it.id == id }
         
         if (index != -1) {
             val p = currentList[index]
+            val newExpandedState = !p.isExpanded
+            
             if (p.isExpanded) {
                 // Collapse
                 currentList[index] = p.copy(isExpanded = false)
                 _uiState.update { it.copy(paragraphs = currentList) }
+                // Persist collapse state
+                viewModelScope.launch(Dispatchers.IO) {
+                    TranslationRepository.updateExpansionState(path, id, false)
+                }
             } else {
                 // Expand
                 if (p.translatedText != null) {
                     // Already translated, just show
                     currentList[index] = p.copy(isExpanded = true)
                     _uiState.update { it.copy(paragraphs = currentList) }
+                    // Persist expand state
+                    viewModelScope.launch(Dispatchers.IO) {
+                        TranslationRepository.updateExpansionState(path, id, true)
+                    }
                 } else {
                     // Need translation (or retry if previous attempt failed)
                     currentList[index] = p.copy(isExpanded = true, isLoading = true, error = null)
                     _uiState.update { it.copy(paragraphs = currentList) }
                     translateParagraph(id, p.originalText)
+                    // Note: translateParagraph will save the expansion state as true when it saves the translation
                 }
             }
         }

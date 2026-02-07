@@ -15,6 +15,7 @@ sqldelight {
     databases {
         create("TransAIDatabase") {
             packageName.set("com.example.transai.db")
+            deriveSchemaFromMigrations.set(true)
         }
     }
 }
