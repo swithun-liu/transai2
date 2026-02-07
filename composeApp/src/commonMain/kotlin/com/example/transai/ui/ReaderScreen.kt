@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -182,14 +183,30 @@ fun ParagraphItem(paragraph: Paragraph, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(4.dp)
     ) {
-        Text(
-            text = paragraph.originalText,
-            style = MaterialTheme.typography.bodyLarge.copy(
-                lineHeight = 24.sp,
-                fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onSurface
+        Row(verticalAlignment = Alignment.Top) {
+            Text(
+                text = paragraph.originalText,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    lineHeight = 24.sp,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.weight(1f)
             )
-        )
+            
+            // Show icon if translation is cached but not expanded
+            if (paragraph.translatedText != null && !paragraph.isExpanded) {
+                Icon(
+                    imageVector = Icons.Default.Translate,
+                    contentDescription = "Cached translation available",
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .padding(start = 8.dp, top = 4.dp)
+                        .width(16.dp)
+                        .height(16.dp)
+                )
+            }
+        }
 
         AnimatedVisibility(
             visible = paragraph.isExpanded,
