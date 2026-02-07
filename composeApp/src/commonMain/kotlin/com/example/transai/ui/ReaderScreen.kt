@@ -66,7 +66,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val listState = rememberLazyListState()
 
     // Restore scroll position
-    LaunchedEffect(uiState.initialScrollIndex, uiState.paragraphs) {
+    LaunchedEffect(uiState.initialScrollIndex) {
         if (uiState.paragraphs.isNotEmpty() && uiState.initialScrollIndex > 0) {
             listState.scrollToItem(uiState.initialScrollIndex)
         }
@@ -146,7 +146,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
                         contentPadding = PaddingValues(16.dp)
                     ) {
-                        items(uiState.paragraphs) { paragraph ->
+                        items(
+                            items = uiState.paragraphs,
+                            key = { it.id }
+                        ) { paragraph ->
                             ParagraphItem(
                                 paragraph = paragraph,
                                 onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
