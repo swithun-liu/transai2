@@ -6,7 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +38,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -153,7 +154,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         ) { paragraph ->
                             ParagraphItem(
                                 paragraph = paragraph,
-                                onClick = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
+                                onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
@@ -176,11 +177,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-fun ParagraphItem(paragraph: Paragraph, onClick: () -> Unit) {
+fun ParagraphItem(paragraph: Paragraph, onToggle: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(4.dp)
     ) {
         Row(verticalAlignment = Alignment.Top) {
@@ -205,6 +205,14 @@ fun ParagraphItem(paragraph: Paragraph, onClick: () -> Unit) {
                         .width(16.dp)
                         .height(16.dp)
                 )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onToggle) {
+                Text(if (paragraph.isExpanded) "Hide" else "Translate")
             }
         }
 
