@@ -1,0 +1,6 @@
+selectOne:
+SELECT * FROM wordTranslation WHERE bookPath = ? AND paragraphId = ? AND word = ?;
+
+insertOrReplace:
+INSERT OR REPLACE INTO wordTranslation(bookPath, paragraphId, word, context, translation, pronunciation)
+VALUES (?, ?, ?, ?, ?, ?);

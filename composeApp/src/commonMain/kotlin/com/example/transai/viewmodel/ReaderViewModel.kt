@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.transai.domain.usecase.GetSettingsUseCase
 import com.example.transai.domain.usecase.ParseBookUseCase
 import com.example.transai.domain.usecase.TranslateParagraphUseCase
+import com.example.transai.domain.usecase.TranslateWordUseCase
 import com.example.transai.domain.usecase.UpdateSettingsUseCase
 import com.example.transai.domain.usecase.GetBookMetadataUseCase
 import com.example.transai.domain.usecase.UpdateBookProgressUseCase
 import com.example.transai.data.TranslationRepository
+import com.example.transai.data.WordTranslationRepository
 import com.example.transai.model.Paragraph
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,7 @@ class ReaderViewModel(
     private val getSettingsUseCase: GetSettingsUseCase = GetSettingsUseCase(),
     private val updateSettingsUseCase: UpdateSettingsUseCase = UpdateSettingsUseCase(),
     private val translateParagraphUseCase: TranslateParagraphUseCase = TranslateParagraphUseCase(),
+    private val translateWordUseCase: TranslateWordUseCase = TranslateWordUseCase(),
     private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase(),
     private val getBookMetadataUseCase: GetBookMetadataUseCase = GetBookMetadataUseCase(),
     private val updateBookProgressUseCase: UpdateBookProgressUseCase = UpdateBookProgressUseCase()
@@ -47,6 +50,8 @@ class ReaderViewModel(
             is ReaderUiEvent.ToggleTranslation -> toggleTranslation(event.id)
             is ReaderUiEvent.UpdateConfig -> updateConfig(event)
             is ReaderUiEvent.SaveProgress -> saveProgress(event.index)
+            is ReaderUiEvent.SelectWord -> selectWord(event)
+            ReaderUiEvent.DismissWordPopup -> dismissWordPopup()
         }
     }
 
@@ -216,6 +221,74 @@ class ReaderViewModel(
                 updateBookProgressUseCase(path, index, total)
             }
         }
+    }
+
+    private fun selectWord(event: ReaderUiEvent.SelectWord) {
+        val path = currentFilePath ?: return
+        val normalizedWord = event.word.trim()
+        if (normalizedWord.isBlank()) return
+        _uiState.update {
+            it.copy(
+                wordPopup = WordPopupState(
+                    word = normalizedWord,
+                    isLoading = true
+                )
+            )
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val cacheKey = normalizedWord.lowercase()
+            val cached = WordTranslationRepository.getTranslation(path, event.paragraphId, cacheKey)
+            if (cached != null) {
+                _uiState.update {
+                    it.copy(
+                        wordPopup = WordPopupState(
+                            word = normalizedWord,
+                            translation = cached.translation,
+                            pronunciation = cached.pronunciation,
+                            isLoading = false
+                        )
+                    )
+                }
+                return@launch
+            }
+            val config = _uiState.value.config
+            val result = translateWordUseCase(normalizedWord, event.context, config)
+            _uiState.update {
+                if (result.isSuccess) {
+                    val data = result.getOrNull()
+                    if (data != null) {
+                        WordTranslationRepository.saveTranslation(
+                            bookPath = path,
+                            paragraphId = event.paragraphId,
+                            word = cacheKey,
+                            context = event.context,
+                            translation = data.translation,
+                            pronunciation = data.pronunciation
+                        )
+                    }
+                    it.copy(
+                        wordPopup = WordPopupState(
+                            word = normalizedWord,
+                            translation = data?.translation,
+                            pronunciation = data?.pronunciation,
+                            isLoading = false
+                        )
+                    )
+                } else {
+                    it.copy(
+                        wordPopup = WordPopupState(
+                            word = normalizedWord,
+                            isLoading = false,
+                            error = result.exceptionOrNull()?.message ?: "Unknown error"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun dismissWordPopup() {
+        _uiState.update { it.copy(wordPopup = null) }
     }
 
     fun getApiKeyForProvider(provider: String): String {

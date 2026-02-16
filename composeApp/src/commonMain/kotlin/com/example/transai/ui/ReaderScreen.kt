@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
@@ -49,15 +50,30 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.example.transai.model.Paragraph
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
+import com.example.transai.viewmodel.WordPopupState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.unit.IntOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +82,17 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val paragraphCoordinates = remember { mutableStateMapOf<Int, LayoutCoordinates>() }
+    var wordPopupAnchor by remember { mutableStateOf<WordPopupAnchor?>(null) }
+    var wordPopupOffset by remember { mutableStateOf<IntOffset?>(null) }
+
+    rememberPopupOffset(
+        anchor = wordPopupAnchor,
+        paragraphCoordinates = paragraphCoordinates,
+        listState = listState,
+        density = density
+    ) { wordPopupOffset = it }
 
     // Restore scroll position
     LaunchedEffect(uiState.initialScrollIndex) {
@@ -154,7 +181,24 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         ) { paragraph ->
                             ParagraphItem(
                                 paragraph = paragraph,
-                                onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) }
+                                onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) },
+                                onWordTap = { word, localOffset ->
+                                    wordPopupAnchor = WordPopupAnchor(paragraph.id, localOffset)
+                                    viewModel.onEvent(
+                                        ReaderUiEvent.SelectWord(
+                                            paragraphId = paragraph.id,
+                                            word = word,
+                                            context = paragraph.originalText
+                                        )
+                                    )
+                                },
+                                onCoordinatesChanged = { coordinates ->
+                                    if (coordinates == null) {
+                                        paragraphCoordinates.remove(paragraph.id)
+                                    } else {
+                                        paragraphCoordinates[paragraph.id] = coordinates
+                                    }
+                                }
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
@@ -170,6 +214,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     ) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
+
+                    WordTranslationDialog(
+                        state = uiState.wordPopup,
+                        offset = wordPopupOffset,
+                        onDismiss = {
+                            wordPopupAnchor = null
+                            wordPopupOffset = null
+                            viewModel.onEvent(ReaderUiEvent.DismissWordPopup)
+                        }
+                    )
                 }
             }
         }
@@ -177,22 +231,75 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-fun ParagraphItem(paragraph: Paragraph, onToggle: () -> Unit) {
+private fun rememberPopupOffset(
+    anchor: WordPopupAnchor?,
+    paragraphCoordinates: Map<Int, LayoutCoordinates>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    density: androidx.compose.ui.unit.Density,
+    update: (IntOffset?) -> Unit
+) {
+    LaunchedEffect(anchor) {
+        if (anchor == null) {
+            update(null)
+            return@LaunchedEffect
+        }
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect {
+                val coordinates = paragraphCoordinates[anchor.paragraphId]
+                if (coordinates != null) {
+                    val root = coordinates.localToRoot(anchor.localOffset)
+                    val verticalOffset = with(density) { 48.dp.toPx() }
+                    update(
+                        IntOffset(
+                            root.x.toInt(),
+                            (root.y - verticalOffset).coerceAtLeast(0f).toInt()
+                        )
+                    )
+                }
+            }
+    }
+}
+
+@Composable
+fun ParagraphItem(
+    paragraph: Paragraph,
+    onToggle: () -> Unit,
+    onWordTap: (String, Offset) -> Unit,
+    onCoordinatesChanged: (LayoutCoordinates?) -> Unit
+) {
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    DisposableEffect(Unit) {
+        onDispose { onCoordinatesChanged(null) }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(4.dp)
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Text(
-                text = paragraph.originalText,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    lineHeight = 24.sp,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                modifier = Modifier.weight(1f)
-            )
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = paragraph.originalText,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        lineHeight = 24.sp,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier
+                        .pointerInput(paragraph.originalText) {
+                            detectTapGestures { position ->
+                                val result = layoutResult ?: return@detectTapGestures
+                                val offset = result.getOffsetForPosition(position)
+                                val word = findWordAt(paragraph.originalText, offset)
+                                if (word != null) {
+                                onWordTap(word, position)
+                                }
+                            }
+                        }
+                    .onGloballyPositioned { onCoordinatesChanged(it) },
+                    onTextLayout = { layoutResult = it }
+                )
+            }
             
             // Show icon if translation is cached but not expanded
             if (paragraph.translatedText != null && !paragraph.isExpanded) {
@@ -265,4 +372,86 @@ fun ParagraphItem(paragraph: Paragraph, onToggle: () -> Unit) {
             }
         }
     }
+}
+
+data class WordPopupAnchor(
+    val paragraphId: Int,
+    val localOffset: Offset
+)
+
+@Composable
+fun WordTranslationDialog(state: WordPopupState?, offset: IntOffset?, onDismiss: () -> Unit) {
+    if (state == null || offset == null) return
+    Popup(
+        alignment = Alignment.TopStart,
+        offset = offset,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .width(220.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = MaterialTheme.shapes.medium
+                )
+                .padding(12.dp)
+        ) {
+            Text(
+                text = state.word,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (state.isLoading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(16.dp).height(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("生成中...")
+                }
+            } else if (state.error != null) {
+                Text(
+                    text = state.error,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.error
+                    )
+                )
+            } else {
+                Text("释义：${state.translation ?: "-"}")
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("读音：${state.pronunciation ?: "-"}")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+        }
+    }
+}
+
+fun findWordAt(text: String, offset: Int): String? {
+    if (text.isBlank()) return null
+    val index = offset.coerceIn(0, text.length - 1)
+    val initialChar = text[index]
+    val startIndex = if (isWordChar(initialChar)) index else index - 1
+    if (startIndex < 0 || !isWordChar(text[startIndex])) return null
+    var start = startIndex
+    var end = startIndex
+    while (start > 0 && isWordChar(text[start - 1])) {
+        start--
+    }
+    while (end < text.length - 1 && isWordChar(text[end + 1])) {
+        end++
+    }
+    return text.substring(start, end + 1)
+}
+
+fun isWordChar(char: Char): Boolean {
+    return char.isLetterOrDigit() || char == '\'' || char == '-'
 }
