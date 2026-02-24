@@ -1,0 +1,9 @@
+selectByBook:
+SELECT * FROM characterNote WHERE bookPath = ? ORDER BY displayName COLLATE NOCASE;
+
+selectOne:
+SELECT * FROM characterNote WHERE bookPath = ? AND nameKey = ?;
+
+insertOrIgnore:
+INSERT OR IGNORE INTO characterNote(bookPath, nameKey, displayName, role, paragraphId)
+VALUES (?, ?, ?, ?, ?);

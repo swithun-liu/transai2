@@ -1,6 +1,7 @@
 package com.example.transai.viewmodel
 
 import com.example.transai.model.Paragraph
+import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 
 data class ChapterInfo(
@@ -11,6 +12,7 @@ data class ChapterInfo(
 data class ReaderUiState(
     val paragraphs: List<Paragraph> = emptyList(),
     val chapters: List<ChapterInfo> = emptyList(),
+    val personNotes: List<PersonNote> = emptyList(),
     val config: TranslationConfig = TranslationConfig(),
     val isLoading: Boolean = false,
     val error: String? = null,

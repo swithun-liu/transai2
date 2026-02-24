@@ -31,10 +31,28 @@ actual class DatabaseDriverFactory {
                      // Since we added a migration from 0 to 1, let's assume it's version 0 and try migrate to 1?
                      // Or if it failed previously, it might be in inconsistent state.
                      // Safe bet: if version is 0 and we expect > 0, try migrate.
-                     TransAIDatabase.Schema.migrate(driver, 0, TransAIDatabase.Schema.version)
+                    TransAIDatabase.Schema.migrate(driver, 0, TransAIDatabase.Schema.version)
+                    driver.execute(null, "PRAGMA user_version = ${TransAIDatabase.Schema.version};", 0)
                  } else if (currentVersion < TransAIDatabase.Schema.version) {
-                     TransAIDatabase.Schema.migrate(driver, currentVersion, TransAIDatabase.Schema.version)
+                    TransAIDatabase.Schema.migrate(driver, currentVersion, TransAIDatabase.Schema.version)
+                    driver.execute(null, "PRAGMA user_version = ${TransAIDatabase.Schema.version};", 0)
                  }
+            }
+            if (!hasTable(driver, "characterNote")) {
+                driver.execute(
+                    null,
+                    """
+                        |CREATE TABLE IF NOT EXISTS characterNote (
+                        |    bookPath TEXT NOT NULL,
+                        |    nameKey TEXT NOT NULL,
+                        |    displayName TEXT NOT NULL,
+                        |    role TEXT NOT NULL,
+                        |    paragraphId INTEGER NOT NULL,
+                        |    PRIMARY KEY (bookPath, nameKey)
+                        |)
+                    """.trimMargin(),
+                    0
+                )
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -54,6 +72,28 @@ actual class DatabaseDriverFactory {
             queryResult.value
         } catch (e: Exception) {
             0L
+        }
+    }
+
+    private fun hasTable(driver: SqlDriver, tableName: String): Boolean {
+        return try {
+            val queryResult = driver.executeQuery<Long>(
+                null,
+                "SELECT count(1) FROM sqlite_master WHERE type='table' AND name=?;",
+                mapper = { cursor ->
+                    if (cursor.next().value) {
+                        QueryResult.Value(cursor.getLong(0) ?: 0L)
+                    } else {
+                        QueryResult.Value(0L)
+                    }
+                },
+                parameters = 1
+            ) {
+                bindString(0, tableName)
+            }
+            (queryResult.value ?: 0L) > 0L
+        } catch (e: Exception) {
+            false
         }
     }
 }

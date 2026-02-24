@@ -1,5 +1,6 @@
 package com.example.transai.data
 
+import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 import com.example.transai.model.WordTranslation
 import io.ktor.client.HttpClient
@@ -12,6 +13,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 class TranslationService {
@@ -108,6 +110,50 @@ class TranslationService {
         }
     }
 
+    suspend fun extractPersonNotes(text: String, config: TranslationConfig): Result<List<PersonNote>> {
+        if (config.apiKey.isBlank()) {
+            return Result.failure(Exception("Please set API Key in settings."))
+        }
+        try {
+            val requestBody = ChatCompletionRequest(
+                model = config.model,
+                messages = listOf(
+                    Message(
+                        "system",
+                        "You are a literary assistant. Extract only character/person names mentioned in the paragraph. Return a JSON array of objects with fields: name, role. name must keep the original form from the text. role must be a concise Chinese description based on this paragraph. If none, return an empty array."
+                    ),
+                    Message("user", text)
+                )
+            )
+            val baseUrl = config.baseUrl.trimEnd('/')
+            val endpoint = "$baseUrl/chat/completions"
+            val response: ChatCompletionResponse = client.post(endpoint) {
+                contentType(ContentType.Application.Json)
+                header("Authorization", "Bearer ${config.apiKey}")
+                setBody(requestBody)
+            }.body()
+            val content = response.choices.firstOrNull()?.message?.content?.trim()
+            if (content.isNullOrBlank()) {
+                return Result.failure(Exception("Extraction failed: Empty response."))
+            }
+            val jsonText = extractJsonArray(content)
+            val payloads = json.decodeFromString(ListSerializer(PersonNotePayload.serializer()), jsonText)
+            val notes = payloads.mapNotNull { payload ->
+                val name = payload.name.trim()
+                val role = payload.role.trim()
+                if (name.isBlank() || role.isBlank()) {
+                    null
+                } else {
+                    PersonNote(name = name, role = role, paragraphId = -1)
+                }
+            }
+            return Result.success(notes)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return Result.failure(e)
+        }
+    }
+
     private fun extractJson(text: String): String {
         val cleaned = text
             .removePrefix("```json")
@@ -116,6 +162,21 @@ class TranslationService {
             .trim()
         val start = cleaned.indexOf('{')
         val end = cleaned.lastIndexOf('}')
+        return if (start != -1 && end != -1 && end > start) {
+            cleaned.substring(start, end + 1)
+        } else {
+            cleaned
+        }
+    }
+
+    private fun extractJsonArray(text: String): String {
+        val cleaned = text
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+        val start = cleaned.indexOf('[')
+        val end = cleaned.lastIndexOf(']')
         return if (start != -1 && end != -1 && end > start) {
             cleaned.substring(start, end + 1)
         } else {
@@ -150,4 +211,10 @@ data class Choice(
 data class WordTranslationPayload(
     val translation: String,
     val pronunciation: String
+)
+
+@Serializable
+data class PersonNotePayload(
+    val name: String,
+    val role: String
 )

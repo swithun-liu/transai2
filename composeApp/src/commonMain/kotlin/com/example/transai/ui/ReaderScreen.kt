@@ -124,13 +124,17 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Text(
-                    "Table of Contents",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                HorizontalDivider()
                 LazyColumn {
+                    item {
+                        Text(
+                            "Table of Contents",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
                     items(uiState.chapters) { chapter ->
                         NavigationDrawerItem(
                             label = { Text(chapter.title) },
@@ -143,6 +147,41 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    item {
+                        Text(
+                            "Characters",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    if (uiState.personNotes.isEmpty()) {
+                        item {
+                            Text(
+                                "暂无人物笔记",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        items(uiState.personNotes) { note ->
+                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                Text(note.name, style = MaterialTheme.typography.titleMedium)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    note.role,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }

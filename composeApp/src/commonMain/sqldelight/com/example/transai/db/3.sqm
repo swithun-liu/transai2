@@ -1,0 +1,8 @@
+CREATE TABLE characterNote (
+    bookPath TEXT NOT NULL,
+    nameKey TEXT NOT NULL,
+    displayName TEXT NOT NULL,
+    role TEXT NOT NULL,
+    paragraphId INTEGER NOT NULL,
+    PRIMARY KEY (bookPath, nameKey)
+);

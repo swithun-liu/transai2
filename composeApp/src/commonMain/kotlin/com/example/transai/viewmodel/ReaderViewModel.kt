@@ -2,6 +2,7 @@ package com.example.transai.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.transai.data.PersonNoteRepository
 import com.example.transai.domain.usecase.GetSettingsUseCase
 import com.example.transai.domain.usecase.ParseBookUseCase
 import com.example.transai.domain.usecase.TranslateParagraphUseCase
@@ -9,9 +10,12 @@ import com.example.transai.domain.usecase.TranslateWordUseCase
 import com.example.transai.domain.usecase.UpdateSettingsUseCase
 import com.example.transai.domain.usecase.GetBookMetadataUseCase
 import com.example.transai.domain.usecase.UpdateBookProgressUseCase
+import com.example.transai.domain.usecase.ExtractPersonNotesUseCase
 import com.example.transai.data.TranslationRepository
 import com.example.transai.data.WordTranslationRepository
 import com.example.transai.model.Paragraph
+import com.example.transai.model.PersonNote
+import com.example.transai.model.TranslationConfig
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -29,6 +33,7 @@ class ReaderViewModel(
     private val updateSettingsUseCase: UpdateSettingsUseCase = UpdateSettingsUseCase(),
     private val translateParagraphUseCase: TranslateParagraphUseCase = TranslateParagraphUseCase(),
     private val translateWordUseCase: TranslateWordUseCase = TranslateWordUseCase(),
+    private val extractPersonNotesUseCase: ExtractPersonNotesUseCase = ExtractPersonNotesUseCase(),
     private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase(),
     private val getBookMetadataUseCase: GetBookMetadataUseCase = GetBookMetadataUseCase(),
     private val updateBookProgressUseCase: UpdateBookProgressUseCase = UpdateBookProgressUseCase()
@@ -72,6 +77,7 @@ class ReaderViewModel(
                     error = null,
                     paragraphs = emptyList(),
                     chapters = emptyList(),
+                    personNotes = emptyList(),
                     initialScrollIndex = 0
                 ) 
             }
@@ -102,11 +108,13 @@ class ReaderViewModel(
                         isExpanded = translationState?.isExpanded == 1L
                     )
                 }
+                val notes = PersonNoteRepository.getNotes(path)
                 
                 _uiState.update { 
                     it.copy(
                         paragraphs = mappedParagraphs,
                         chapters = chaptersInfo,
+                        personNotes = notes,
                         isLoading = false,
                         initialScrollIndex = initialIndex
                     )
@@ -206,6 +214,11 @@ class ReaderViewModel(
                 }
                 state.copy(paragraphs = currentList)
             }
+            if (result.isSuccess) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    extractAndSavePersonNotes(path, id, text, config)
+                }
+            }
         }
     }
 
@@ -289,6 +302,39 @@ class ReaderViewModel(
 
     private fun dismissWordPopup() {
         _uiState.update { it.copy(wordPopup = null) }
+    }
+
+    private suspend fun extractAndSavePersonNotes(path: String, paragraphId: Int, text: String, config: TranslationConfig) {
+        val result = extractPersonNotesUseCase(text, config)
+        val extracted = result.getOrNull().orEmpty()
+        if (extracted.isEmpty()) return
+        val added = mutableListOf<PersonNote>()
+        extracted.forEach { note ->
+            val normalized = normalizeName(note.name)
+            if (normalized.isBlank()) return@forEach
+            val inserted = PersonNoteRepository.insertIfAbsent(
+                bookPath = path,
+                nameKey = normalized,
+                displayName = note.name.trim(),
+                role = note.role.trim(),
+                paragraphId = paragraphId
+            )
+            if (inserted) {
+                added.add(note.copy(paragraphId = paragraphId))
+            }
+        }
+        if (added.isNotEmpty()) {
+            _uiState.update { state ->
+                val merged = (state.personNotes + added)
+                    .distinctBy { it.name.lowercase() }
+                    .sortedBy { it.name.lowercase() }
+                state.copy(personNotes = merged)
+            }
+        }
+    }
+
+    private fun normalizeName(name: String): String {
+        return name.trim().lowercase()
     }
 
     fun getApiKeyForProvider(provider: String): String {
