@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="iosApp" type="XCProjectRunConfigurationType" factoryName="XCProjectRunConfigurationType">
+    <option name="XcodeProjectFilePath" value="$PROJECT_DIR$/iosApp/iosApp.xcodeproj" />
+    <option name="XcodeScheme" value="iosApp" />
+    <method v="2" />
+  </configuration>
+</component>
