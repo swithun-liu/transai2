@@ -24,7 +24,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,6 +88,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val paragraphCoordinates = remember { mutableStateMapOf<Int, LayoutCoordinates>() }
     var wordPopupAnchor by remember { mutableStateOf<WordPopupAnchor?>(null) }
     var wordPopupOffset by remember { mutableStateOf<IntOffset?>(null) }
+    var showCharactersDialog by remember { mutableStateOf(false) }
 
     rememberPopupOffset(
         anchor = wordPopupAnchor,
@@ -151,38 +154,6 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     item {
                         Spacer(modifier = Modifier.height(12.dp))
                     }
-                    item {
-                        Text(
-                            "Characters",
-                            modifier = Modifier.padding(16.dp),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    }
-                    item {
-                        HorizontalDivider()
-                    }
-                    if (uiState.personNotes.isEmpty()) {
-                        item {
-                            Text(
-                                "暂无人物笔记",
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        items(uiState.personNotes) { note ->
-                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                                Text(note.name, style = MaterialTheme.typography.titleMedium)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    note.role,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -194,6 +165,11 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showCharactersDialog = true }) {
+                            Icon(Icons.Default.Person, contentDescription = "Characters")
                         }
                     }
                 )
@@ -263,6 +239,13 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             viewModel.onEvent(ReaderUiEvent.DismissWordPopup)
                         }
                     )
+
+                    if (showCharactersDialog) {
+                        CharactersDialog(
+                            personNotes = uiState.personNotes,
+                            onDismiss = { showCharactersDialog = false }
+                        )
+                    }
                 }
             }
         }
@@ -493,4 +476,39 @@ fun findWordAt(text: String, offset: Int): String? {
 
 fun isWordChar(char: Char): Boolean {
     return char.isLetterOrDigit() || char == '\'' || char == '-'
+}
+
+@Composable
+fun CharactersDialog(personNotes: List<com.example.transai.model.PersonNote>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Characters") },
+        text = {
+            if (personNotes.isEmpty()) {
+                Text(
+                    "暂无人物笔记",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn {
+                    items(personNotes) { note ->
+                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                            Text(note.name, style = MaterialTheme.typography.titleMedium)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                note.role,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
 }
