@@ -14,4 +14,5 @@ expect fun deleteFile(path: String): Boolean
 
 expect fun openInExplorer(path: String)
 
+expect fun supportsOpenInExplorer(): Boolean
 

@@ -1,27 +1,45 @@
 package com.example.transai.data
 
-import com.example.transai.db.TransAIDatabase
-
-import com.example.transai.db.Translation
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.set
 
 object TranslationRepository {
-    private val driver = DatabaseDriverFactory().createDriver()
-    private val database = TransAIDatabase(driver)
-    private val queries = database.translationQueries
+    private val settings = Settings()
 
-    fun getTranslationState(bookPath: String, paragraphId: Int): Translation? {
-        return queries.selectOne(bookPath, paragraphId.toLong()).executeAsOneOrNull()
+    fun getTranslationState(bookPath: String, paragraphId: Int): TranslationState? {
+        val translatedText = settings.getStringOrNull(translationKey(bookPath, paragraphId))
+        val isExpanded = settings.getBoolean(expansionKey(bookPath, paragraphId), false)
+        return if (translatedText == null && !isExpanded) {
+            null
+        } else {
+            TranslationState(
+                translatedText = translatedText,
+                isExpanded = isExpanded
+            )
+        }
     }
 
     fun saveTranslation(bookPath: String, paragraphId: Int, translation: String) {
-        // When saving new translation, we assume user wants it expanded (default behavior)
-        // or we preserve existing expanded state?
-        // Let's check if it exists first to preserve state, or just default to true.
-        // Usually if we just translated it, we want to show it.
-        queries.insertOrReplace(bookPath, paragraphId.toLong(), translation, 1) // 1 = true
+        settings[translationKey(bookPath, paragraphId)] = translation
+        settings[expansionKey(bookPath, paragraphId)] = true
     }
 
     fun updateExpansionState(bookPath: String, paragraphId: Int, isExpanded: Boolean) {
-        queries.updateExpansion(if (isExpanded) 1 else 0, bookPath, paragraphId.toLong())
+        settings[expansionKey(bookPath, paragraphId)] = isExpanded
     }
 }
+
+data class TranslationState(
+    val translatedText: String?,
+    val isExpanded: Boolean
+)
+
+private fun translationKey(bookPath: String, paragraphId: Int): String {
+    return "translation_value_${bookPath.cacheKeyPart()}_$paragraphId"
+}
+
+private fun expansionKey(bookPath: String, paragraphId: Int): String {
+    return "translation_expanded_${bookPath.cacheKeyPart()}_$paragraphId"
+}
+
+private fun String.cacheKeyPart(): Int = hashCode()

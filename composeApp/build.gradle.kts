@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -8,18 +9,9 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.sqldelight)
 }
 
-sqldelight {
-    databases {
-        create("TransAIDatabase") {
-            packageName.set("com.example.transai.db")
-            deriveSchemaFromMigrations.set(true)
-        }
-    }
-}
-
+@OptIn(ExperimentalWasmDsl::class)
 kotlin {
     androidTarget {
         compilerOptions {
@@ -38,6 +30,11 @@ kotlin {
     }
     
     jvm()
+
+    wasmJs {
+        browser()
+        binaries.executable()
+    }
     
     sourceSets {
         androidMain.dependencies {
@@ -63,23 +60,22 @@ kotlin {
             implementation(libs.multiplatform.settings.no.arg)
             implementation(libs.ksoup)
             implementation(compose.materialIconsExtended)
-            implementation(libs.sqldelight.coroutines)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            implementation(libs.sqldelight.android.driver)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.client.cio)
-            implementation(libs.sqldelight.sqlite.driver)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
-            implementation(libs.sqldelight.native.driver)
+        }
+        wasmJsMain.dependencies {
+            implementation(npm("fflate", "0.8.2"))
         }
     }
 }

@@ -70,3 +70,4 @@ actual fun openInExplorer(path: String) {
     println("Open in explorer requested for: $path")
 }
 
+actual fun supportsOpenInExplorer(): Boolean = false

@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.transai.data.model.BookMetadata
+import com.example.transai.platform.supportsOpenInExplorer
 import com.example.transai.viewmodel.BookshelfViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,6 +157,7 @@ fun BookItem(
     onOpenFolder: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val canOpenFolder = supportsOpenInExplorer()
 
     Card(
         modifier = Modifier
@@ -220,16 +222,18 @@ fun BookItem(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Open Folder") },
-                        onClick = {
-                            onOpenFolder()
-                            showMenu = false
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.FolderOpen, contentDescription = null)
-                        }
-                    )
+                    if (canOpenFolder) {
+                        DropdownMenuItem(
+                            text = { Text("Open Folder") },
+                            onClick = {
+                                onOpenFolder()
+                                showMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null)
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Delete") },
                         onClick = {

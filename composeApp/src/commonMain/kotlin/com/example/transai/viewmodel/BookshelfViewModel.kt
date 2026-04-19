@@ -10,8 +10,6 @@ import com.example.transai.platform.saveBookToSandbox
 import com.example.transai.platform.deleteFile
 import com.example.transai.platform.openInExplorer
 import kotlinx.coroutines.Dispatchers
-
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -33,7 +31,7 @@ class BookshelfViewModel(
 
     @OptIn(ExperimentalResourceApi::class)
     private fun checkAndLoadSampleBook() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             // Only add sample book if the bookshelf is empty
             if (bookRepository.books.value.isEmpty()) {
                 try {
@@ -49,7 +47,7 @@ class BookshelfViewModel(
     }
 
     fun addBook(path: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             try {
                 // Copy file to sandbox first
                 val savedPath = saveBookToSandbox(path)
@@ -73,7 +71,7 @@ class BookshelfViewModel(
     }
 
     fun removeBook(path: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             try {
                 // Try to delete physical file first
                 deleteFile(path)

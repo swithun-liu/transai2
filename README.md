@@ -14,6 +14,7 @@
 - [x] **Android**: 完整的原生体验。
 - [x] **iOS**: 通过 SwiftUI + Compose Multiplatform 实现。
 - [x] **Desktop (macOS)**: 支持桌面端阅读。
+- [x] **Web (Browser)**: 支持在浏览器中导入 EPUB、阅读、配置模型与调用翻译。
 
 ### 2. 沉浸式阅读体验
 - [x] **按钮触发翻译**: 默认显示英文原文，通过段落下方按钮展开/收起 AI 生成的中文翻译。
@@ -72,14 +73,14 @@
 ## 🛠 技术栈
 
 - **语言**: Kotlin
-- **UI 框架**: Compose Multiplatform (Android, iOS, Desktop)
+- **UI 框架**: Compose Multiplatform (Android, iOS, Desktop, Web)
 - **网络**: Ktor Client
 - **序列化**: Kotlinx.serialization
 - **架构**: MVI (Model-View-Intent) / Clean Architecture
   - **Presentation**: ViewModel (UiState, UiEvent)
   - **Domain**: UseCases (Business Logic)
   - **Data**: Repository & Data Sources
-- **存储**: Multiplatform Settings
+- **存储**: Multiplatform Settings / Browser Local Storage
 
 ---
 
@@ -101,6 +102,23 @@
 1. 确保已安装 Xcode。
 2. 在 `iosApp` 目录下配置 Signing Team。
 3. 使用 Android Studio 运行 `iosApp` 配置，或在 Xcode 中打开项目运行。
+
+### Web (Browser Wasm)
+开发模式：
+```shell
+./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+```
+
+生产构建：
+```shell
+./gradlew :composeApp:wasmJsBrowserDistribution
+```
+
+说明：
+- Web 端通过浏览器文件选择器导入 `.epub`。
+- UI 由 Compose Multiplatform `wasmJs` 渲染，文件导入、ZIP 解压与浏览器存储通过 JS bridge 提供能力。
+- 书架、阅读进度、翻译缓存等数据会持久化到浏览器本地存储。
+- 当前 Web 版不提供“打开所在文件夹”能力。
 
 ---
 *Created with ❤️ by TransAI Team*

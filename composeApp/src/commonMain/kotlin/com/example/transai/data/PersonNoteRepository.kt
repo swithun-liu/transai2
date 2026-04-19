@@ -1,56 +1,61 @@
 package com.example.transai.data
 
-import com.example.transai.db.CharacterNote
-import com.example.transai.db.TransAIDatabase
 import com.example.transai.model.PersonNote
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.set
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 object PersonNoteRepository {
-    private val driver = DatabaseDriverFactory().createDriver()
-    private val database = TransAIDatabase(driver)
-    private val queries = database.characterNoteQueries
+    private val settings = Settings()
+    private val json = Json { ignoreUnknownKeys = true }
 
     fun getNotes(bookPath: String): List<PersonNote> {
-        ensureTable()
-        return queries.selectByBook(bookPath).executeAsList().map { it.toModel() }
+        return loadNotes(bookPath).map { it.toModel() }
     }
 
     fun exists(bookPath: String, nameKey: String): Boolean {
-        ensureTable()
-        return queries.selectOne(bookPath, nameKey).executeAsOneOrNull() != null
+        return loadNotes(bookPath).any { it.nameKey == nameKey }
     }
 
     fun insertIfAbsent(bookPath: String, nameKey: String, displayName: String, role: String, paragraphId: Int): Boolean {
-        ensureTable()
-        if (exists(bookPath, nameKey)) return false
-        queries.insertOrIgnore(bookPath, nameKey, displayName, role, paragraphId.toLong())
+        val currentNotes = loadNotes(bookPath).toMutableList()
+        if (currentNotes.any { it.nameKey == nameKey }) return false
+        currentNotes += CachedPersonNote(
+            nameKey = nameKey,
+            displayName = displayName,
+            role = role,
+            paragraphId = paragraphId
+        )
+        saveNotes(bookPath, currentNotes)
         return true
     }
 
-    private fun ensureTable() {
-        try {
-            driver.execute(
-                null,
-                """
-                    |CREATE TABLE IF NOT EXISTS characterNote (
-                    |    bookPath TEXT NOT NULL,
-                    |    nameKey TEXT NOT NULL,
-                    |    displayName TEXT NOT NULL,
-                    |    role TEXT NOT NULL,
-                    |    paragraphId INTEGER NOT NULL,
-                    |    PRIMARY KEY (bookPath, nameKey)
-                    |)
-                """.trimMargin(),
-                0
-            )
-        } catch (e: Exception) {
-        }
+    private fun loadNotes(bookPath: String): List<CachedPersonNote> {
+        val raw = settings.getStringOrNull(cacheKey(bookPath)) ?: return emptyList()
+        return runCatching { json.decodeFromString<List<CachedPersonNote>>(raw) }.getOrDefault(emptyList())
+    }
+
+    private fun saveNotes(bookPath: String, notes: List<CachedPersonNote>) {
+        settings[cacheKey(bookPath)] = json.encodeToString(notes)
     }
 }
 
-private fun CharacterNote.toModel(): PersonNote {
+@Serializable
+private data class CachedPersonNote(
+    val nameKey: String,
+    val displayName: String,
+    val role: String,
+    val paragraphId: Int
+)
+
+private fun CachedPersonNote.toModel(): PersonNote {
     return PersonNote(
         name = displayName,
         role = role,
-        paragraphId = paragraphId.toInt()
+        paragraphId = paragraphId
     )
 }
+
+private fun cacheKey(bookPath: String): String = "person_notes_${bookPath.hashCode()}"

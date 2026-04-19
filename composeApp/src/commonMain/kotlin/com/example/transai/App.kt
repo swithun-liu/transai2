@@ -22,7 +22,9 @@ sealed class Screen {
 
 @Composable
 fun App() {
-    MaterialTheme {
+    MaterialTheme(
+        typography = appTypography()
+    ) {
         val readerViewModel = viewModel { ReaderViewModel() }
         val bookshelfViewModel = viewModel { BookshelfViewModel() }
         

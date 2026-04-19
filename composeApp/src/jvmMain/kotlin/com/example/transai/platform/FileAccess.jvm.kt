@@ -66,3 +66,4 @@ actual fun openInExplorer(path: String) {
     }
 }
 
+actual fun supportsOpenInExplorer(): Boolean = true

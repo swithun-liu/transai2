@@ -18,7 +18,6 @@ import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,7 +69,7 @@ class ReaderViewModel(
 
     private fun loadFile(path: String) {
         currentFilePath = path
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             _uiState.update { 
                 it.copy(
                     isLoading = true, 
@@ -105,7 +104,7 @@ class ReaderViewModel(
                         id = index, 
                         originalText = text.trim(),
                         translatedText = translationState?.translatedText,
-                        isExpanded = translationState?.isExpanded == 1L
+                        isExpanded = translationState?.isExpanded == true
                     )
                 }
                 val notes = PersonNoteRepository.getNotes(path)
@@ -134,7 +133,7 @@ class ReaderViewModel(
 
     @OptIn(ExperimentalResourceApi::class)
     private fun loadSampleContent() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             try {
                 val bytes = Res.readBytes("files/sample.epub")
                 val path = saveTempFile("sample.epub", bytes)
@@ -160,7 +159,7 @@ class ReaderViewModel(
                 currentList[index] = p.copy(isExpanded = false)
                 _uiState.update { it.copy(paragraphs = currentList) }
                 // Persist collapse state
-                viewModelScope.launch(Dispatchers.IO) {
+                viewModelScope.launch(Dispatchers.Default) {
                     TranslationRepository.updateExpansionState(path, id, false)
                 }
             } else {
@@ -170,7 +169,7 @@ class ReaderViewModel(
                     currentList[index] = p.copy(isExpanded = true)
                     _uiState.update { it.copy(paragraphs = currentList) }
                     // Persist expand state
-                    viewModelScope.launch(Dispatchers.IO) {
+                    viewModelScope.launch(Dispatchers.Default) {
                         TranslationRepository.updateExpansionState(path, id, true)
                     }
                 } else {
@@ -215,7 +214,7 @@ class ReaderViewModel(
                 state.copy(paragraphs = currentList)
             }
             if (result.isSuccess) {
-                viewModelScope.launch(Dispatchers.IO) {
+                viewModelScope.launch(Dispatchers.Default) {
                     extractAndSavePersonNotes(path, id, text, config)
                 }
             }
@@ -230,7 +229,7 @@ class ReaderViewModel(
         val path = currentFilePath ?: return
         val total = _uiState.value.paragraphs.size
         if (total > 0) {
-            viewModelScope.launch(Dispatchers.IO) {
+            viewModelScope.launch(Dispatchers.Default) {
                 updateBookProgressUseCase(path, index, total)
             }
         }
@@ -248,7 +247,7 @@ class ReaderViewModel(
                 )
             )
         }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.Default) {
             val cacheKey = normalizedWord.lowercase()
             val cached = WordTranslationRepository.getTranslation(path, event.paragraphId, cacheKey)
             if (cached != null) {
