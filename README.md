@@ -125,21 +125,72 @@
 
 ## 🌐 项目部署
 
-项目使用单一 GitHub 仓库进行管理，支持多种部署方案。
+项目使用单一 GitHub 仓库 + Vercel 自动化部署。
 
-### 仓库地址
+### 部署地址
 - **GitHub**: https://github.com/swithun-liu/transai2
+- **生产环境**: https://transai2.vercel.app
 
-### 代码推送
+### 🚀 部署流程（3步完成）
 
+#### 第一步：本地构建 WebAssembly 版本
 ```bash
+# 使用部署脚本（推荐）
+./deploy-vercel.sh
+
+# 或者手动构建
+./gradlew :composeApp:wasmJsBrowserDistribution
+```
+
+#### 第二步：提交代码到 GitHub
+```bash
+# 查看变更
+git status
+
+# 添加所有文件
+git add .
+
+# 提交变更
+git commit -m "更新描述"
+
 # 推送到 GitHub
 git push origin master
-
-# 或者设置别名简化推送
-git config alias.p 'push origin master'
-git p  # 一键推送
 ```
+
+#### 第三步：Vercel 自动部署
+- **自动触发**：代码推送到 GitHub 后，Vercel 自动开始部署
+- **部署时间**：约 1-3 分钟
+- **访问地址**：https://transai2.vercel.app
+
+### 📊 部署状态监控
+
+#### 查看部署状态
+1. **Vercel 控制台**: https://vercel.com/swithun-lius-projects/transai2
+2. **查看部署日志**: 实时监控构建过程
+3. **访问测试**: 部署完成后立即测试功能
+
+### 🔧 特殊情况处理
+
+#### 网络依赖问题（如果出现）
+```bash
+# 清理缓存重新构建
+rm -rf build kotlin-js-store
+./gradlew clean
+./deploy-vercel.sh
+```
+
+#### 部署失败处理
+- **自动回滚**: Vercel 会自动回滚到上一个可用版本
+- **错误日志**: 在 Vercel 控制台查看详细错误信息
+- **重新部署**: 修复问题后重新推送代码
+
+### 🎯 部署验证清单
+
+**每次部署后检查：**
+- ✅ 网站可访问：https://transai2.vercel.app
+- ✅ 界面正常显示
+- ✅ 基本功能正常（EPUB 导入、AI 翻译）
+- ✅ 无报错信息
 
 ### Gitee Pages 部署
 

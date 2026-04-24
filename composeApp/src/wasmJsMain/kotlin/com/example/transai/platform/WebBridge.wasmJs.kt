@@ -3,6 +3,7 @@
 package com.example.transai.platform
 
 import kotlin.js.JsAny
+import kotlin.js.Promise
 
 @JsModule("./transai_bridge.mjs")
 external object WebBridge {
@@ -13,5 +14,5 @@ external object WebBridge {
     fun deleteStoredFile(path: String): Boolean
     fun zipEntryNames(path: String): JsAny
     fun zipEntryBase64(path: String, name: String): JsAny?
-    fun pickEpubFile(): JsAny?
+    fun pickEpubFile(): Promise<JsAny?>
 }
