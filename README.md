@@ -119,7 +119,68 @@
 - Web 端通过浏览器文件选择器导入 `.epub`。
 - UI 由 Compose Multiplatform `wasmJs` 渲染，文件导入、ZIP 解压与浏览器存储通过 JS bridge 提供能力。
 - 书架、阅读进度、翻译缓存等数据会持久化到浏览器本地存储。
-- 当前 Web 版不提供“打开所在文件夹”能力。
+- 当前 Web 版不提供"打开所在文件夹"能力。
+
+---
+
+## 🌐 双仓库部署
+
+项目同时维护 GitHub 和 Gitee 仓库，支持国内快速访问。
+
+### 仓库地址
+- **GitHub**: https://github.com/swithun-liu/transai2
+- **Gitee**: https://gitee.com/swithun_liu/transai2
+
+### 推送方式
+
+#### 一键推送（推荐）
+```bash
+# 同时推送到 GitHub 和 Gitee
+./push-to-both.sh
+```
+
+#### 分别推送
+```bash
+# 推送到 GitHub
+git push origin master
+
+# 推送到 Gitee
+git push gitee master
+```
+
+#### 配置多仓库推送
+```bash
+# 设置 origin 同时推送到两个仓库
+git remote set-url --add --push origin git@github.com:swithun-liu/transai2.git
+git remote set-url --add --push origin git@gitee.com:swithun_liu/transai2.git
+
+# 之后只需 git push 即可
+git push
+```
+
+### Gitee Pages 部署
+
+1. **构建 Web 版本**：
+   ```bash
+   ./gradlew :composeApp:wasmJsBrowserDistribution
+   ```
+
+2. **准备部署文件**：
+   ```bash
+   ./deploy-gitee.sh
+   ```
+
+3. **开启 Gitee Pages**：
+   - 进入 Gitee 仓库设置
+   - 服务 → Gitee Pages
+   - 部署分支：`master`
+   - 部署目录：`/`
+   - 点击"启动"
+
+4. **访问网站**：
+   ```
+   https://swithun_liu.gitee.io/transai2/
+   ```
 
 ---
 *Created with ❤️ by TransAI Team*
