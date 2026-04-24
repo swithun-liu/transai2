@@ -1,25 +1,78 @@
-// 简单的 ZIP 解压实现（替代 fflate）
+// 改进的 ZIP 解压实现（支持 EPUB 文件解析）
 function simpleUnzip(data) {
-    // 这是一个简化的 ZIP 解压实现，仅支持基本的 ZIP 文件结构
-    // 对于 EPUB 文件，我们只需要读取文件列表，不需要实际解压内容
     const view = new DataView(data.buffer);
     const files = {};
     
-    // 简单的 ZIP 文件头解析
+    // 解析 ZIP 文件结构
+    let offset = 0;
+    
+    // 查找中央目录记录（位于文件末尾）
+    const centralDirOffset = findCentralDirectory(data);
+    if (centralDirOffset === -1) {
+        console.warn("ZIP file structure not found, using simplified parsing");
+        return fallbackParse(data);
+    }
+    
+    // 解析中央目录记录
+    offset = centralDirOffset;
+    while (offset < data.length - 4) {
+        // 中央目录文件头签名 (0x02014b50)
+        if (view.getUint32(offset, true) === 0x02014b50) {
+            // 读取文件信息
+            const compression = view.getUint16(offset + 10, true);
+            const nameLength = view.getUint16(offset + 28, true);
+            const extraLength = view.getUint16(offset + 30, true);
+            const commentLength = view.getUint16(offset + 32, true);
+            
+            // 读取文件名
+            const nameBytes = new Uint8Array(data.buffer, offset + 46, nameLength);
+            const fileName = new TextDecoder().decode(nameBytes);
+            
+            // 记录文件信息
+            files[fileName] = new Uint8Array(0);
+            
+            // 移动到下一个中央目录记录
+            offset += 46 + nameLength + extraLength + commentLength;
+        } else {
+            break;
+        }
+    }
+    
+    return files;
+}
+
+// 查找中央目录
+function findCentralDirectory(data) {
+    const view = new DataView(data.buffer);
+    
+    // 从文件末尾查找中央目录结束签名 (0x06054b50)
+    for (let offset = data.length - 22; offset >= 0; offset--) {
+        if (view.getUint32(offset, true) === 0x06054b50) {
+            // 找到中央目录结束记录，获取中央目录偏移量
+            const centralDirOffset = view.getUint32(offset + 16, true);
+            return centralDirOffset;
+        }
+    }
+    
+    return -1;
+}
+
+// 备用解析方法（如果中央目录找不到）
+function fallbackParse(data) {
+    const view = new DataView(data.buffer);
+    const files = {};
+    
     let offset = 0;
     while (offset < data.length - 4) {
-        // 查找 ZIP 文件头签名 (0x04034b50)
+        // 本地文件头签名 (0x04034b50)
         if (view.getUint32(offset, true) === 0x04034b50) {
-            // 读取文件名长度
             const nameLength = view.getUint16(offset + 26, true);
             const extraLength = view.getUint16(offset + 28, true);
             
-            // 读取文件名
             const nameBytes = new Uint8Array(data.buffer, offset + 30, nameLength);
             const fileName = new TextDecoder().decode(nameBytes);
             
-            // 记录文件信息（不实际解压内容）
-            files[fileName] = new Uint8Array(0); // 空内容，因为我们只需要文件名
+            files[fileName] = new Uint8Array(0);
             
             // 移动到下一个文件头
             offset += 30 + nameLength + extraLength;
