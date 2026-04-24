@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "public/**/*",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "composeApp/build/distributions/wasmJs/**/*",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ],
+  "buildCommand": "echo '构建完成 - 使用静态文件部署'",
+  "outputDirectory": "public",
+  "installCommand": "echo '跳过安装步骤'",
+  "env": {
+    "NODE_VERSION": "18"
+  }
+}

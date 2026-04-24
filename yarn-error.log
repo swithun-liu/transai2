@@ -1,0 +1,26 @@
+Arguments: 
+  /Users/swithun/.nvm/versions/node/v24.14.1/bin/node /opt/homebrew/bin/yarn config set registry https://registry.npmmirror.com/
+
+PATH: 
+  /Users/swithun/.trae-cn/tools/trae-gopls/current:/Users/swithun/.trae-cn/sdks/workspaces/2c2fbdea/versions/node/current:/Users/swithun/.trae-cn/sdks/versions/node/current:/Users/swithun/.nvm/versions/node/v24.14.1/bin:/Users/swithun/.trae-cn/sdks/workspaces/2c2fbdea/versions/node/current:/Users/swithun/.trae-cn/sdks/versions/node/current:/Users/swithun/.trae-cn/tools/trae-gopls/current:/Users/swithun/.trae-cn/extensions/vadimcn.vscode-lldb-1.12.2/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/Apple/usr/bin:/Applications/Wireshark.app/Contents/MacOS:/Applications/Trae CN.app/Contents/Resources/app/bin:/Users/swithun/.trae-cn/extensions/vadimcn.vscode-lldb-1.12.2/bin:/Users/swithun/.trae-cn/tools/trae-gopls/current:/Users/swithun/.trae-cn/sdks/workspaces/2c2fbdea/versions/node/current:/Users/swithun/.trae-cn/sdks/versions/node/current:/Users/swithun/.nvm/versions/node/v24.14.1/bin:/Users/swithun/.cargo/bin:/Users/swithun/Library/Application Support/JetBrains/Toolbox/scripts:/opt/homebrew/bin/:/Users/swithun/Library/Android/sdk/ndk/27.0.12077973:/Users/swithun/Library/Android/sdk/platform-tools/:/Users/swithun/development/sdk/flutter/flutter/bin:/Users/swithun/.rvm/bin:/Users/swithun/.lmstudio/bin:/Users/swithun/Library/Application Support/JetBrains/Toolbox/scripts:/opt/homebrew/bin/:/Users/swithun/Library/Android/sdk/ndk/27.0.12077973:/Users/swithun/Library/Android/sdk/platform-tools/:/Users/swithun/development/sdk/flutter/flutter/bin:/Users/swithun/.rvm/bin:/Users/swithun/.lmstudio/bin:/Users/swithun/.rvm/bin:/Users/swithun/.lmstudio/bin
+
+Yarn version: 
+  1.22.19
+
+Node version: 
+  24.14.1
+
+Platform: 
+  darwin arm64
+
+Trace: 
+  Error: EPERM: operation not permitted, open '/Users/swithun/.yarnrc'
+
+npm manifest: 
+  No manifest
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
