@@ -11,20 +11,44 @@ actual class ZipArchive actual constructor(private val filePath: String) {
     actual fun close() = Unit
 
     actual fun getEntry(name: String): ByteArray? {
-        val encoded = WebBridge.zipEntryBase64(filePath, name)
-        return when (encoded) {
-            is String -> Base64.decode(encoded)
-            else -> null
-        }
+    val encoded = WebBridge.zipEntryBase64(filePath, name)
+    
+    // 更安全的类型检查
+    if (encoded == null) {
+        return null
     }
+    
+    try {
+        val encodedString = encoded as? String
+        if (encodedString != null) {
+            return Base64.decode(encodedString)
+        }
+    } catch (e: Exception) {
+        println("Error decoding base64 for $name: $e")
+    }
+    
+    return null
+}
 
-    actual fun entryNames(): List<String> {
-        val namesJson = WebBridge.zipEntryNames(filePath)
-        return when (namesJson) {
-            is String -> json.decodeFromString(namesJson)
-            else -> emptyList()
-        }
+actual fun entryNames(): List<String> {
+    val namesJson = WebBridge.zipEntryNames(filePath)
+    
+    // 更安全的类型检查
+    if (namesJson == null) {
+        return emptyList()
     }
+    
+    try {
+        val jsonString = namesJson as? String
+        if (jsonString != null) {
+            return json.decodeFromString(jsonString)
+        }
+    } catch (e: Exception) {
+        println("Error parsing zip entry names: $e")
+    }
+    
+    return emptyList()
+}
 }
 
 actual fun saveTempFile(name: String, content: ByteArray): String {
