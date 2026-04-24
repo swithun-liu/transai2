@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "buildCommand": "./gradlew :composeApp:wasmJsBrowserDistribution",
+  "buildCommand": "./gradlew :composeApp:wasmJsBrowserDistribution -Dorg.gradle.java.home=/opt/buildhome/.java/17",
   "outputDirectory": "composeApp/build/distributions/wasmJs",
   "installCommand": "npm config set registry https://registry.npmmirror.com/ && yarn config set registry https://registry.npmmirror.com/",
   "env": {
+    "JAVA_HOME": "/opt/buildhome/.java/17",
     "NODE_VERSION": "18"
   }
 }
