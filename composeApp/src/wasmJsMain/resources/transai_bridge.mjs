@@ -1,4 +1,16 @@
-import { unzipSync } from "fflate";
+// 使用 CDN 引入 fflate，避免 npm 依赖问题
+let fflate;
+
+// 动态加载 fflate
+async function loadFflate() {
+    if (!fflate) {
+        // 使用 jsDelivr CDN
+        const fflateUrl = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+        const module = await import(fflateUrl);
+        fflate = module;
+    }
+    return fflate;
+}
 
 const storageKeyPrefix = "transai.browser.file.";
 const tempPathPrefix = "browser://temp/";
@@ -32,12 +44,14 @@ export function deleteStoredFile(path) {
     return exists;
 }
 
-export function zipEntryNames(path) {
-    return JSON.stringify(Object.keys(getArchive(path)));
+export async function zipEntryNames(path) {
+    const archive = await getArchive(path);
+    return JSON.stringify(Object.keys(archive));
 }
 
-export function zipEntryBase64(path, name) {
-    const entry = getArchive(path)[name];
+export async function zipEntryBase64(path, name) {
+    const archive = await getArchive(path);
+    const entry = archive[name];
     if (!entry) {
         return null;
     }
@@ -77,7 +91,7 @@ export async function pickEpubFile() {
     });
 }
 
-function getArchive(path) {
+async function getArchive(path) {
     if (archiveCache.has(path)) {
         return archiveCache.get(path);
     }
@@ -87,7 +101,8 @@ function getArchive(path) {
         return {};
     }
 
-    const archive = unzipSync(base64ToBytes(base64));
+    const fflateModule = await loadFflate();
+    const archive = fflateModule.unzipSync(base64ToBytes(base64));
     archiveCache.set(path, archive);
     return archive;
 }

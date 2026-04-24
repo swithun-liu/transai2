@@ -12,7 +12,7 @@ external object WebBridge {
     fun saveFile(path: String, base64: String)
     fun readFile(path: String): String?
     fun deleteStoredFile(path: String): Boolean
-    fun zipEntryNames(path: String): String
-    fun zipEntryBase64(path: String, name: String): String?
+    fun zipEntryNames(path: String): Promise<String>
+    fun zipEntryBase64(path: String, name: String): Promise<String?>
     fun pickEpubFile(): Promise<JsAny?>
 }
