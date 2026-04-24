@@ -11,12 +11,13 @@ actual class ZipArchive actual constructor(private val filePath: String) {
     actual fun close() = Unit
 
     actual fun getEntry(name: String): ByteArray? {
-        val encoded = WebBridge.zipEntryBase64(filePath, name) ?: return null
+        val encoded = WebBridge.zipEntryBase64(filePath, name) as? String ?: return null
         return Base64.decode(encoded)
     }
 
     actual fun entryNames(): List<String> {
-        return json.decodeFromString(WebBridge.zipEntryNames(filePath))
+        val namesJson = WebBridge.zipEntryNames(filePath) as String
+        return json.decodeFromString(namesJson)
     }
 }
 

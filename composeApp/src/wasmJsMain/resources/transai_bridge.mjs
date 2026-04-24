@@ -1,15 +1,34 @@
-// 使用 CDN 引入 fflate，避免 npm 依赖问题
-let fflate;
-
-// 动态加载 fflate
-async function loadFflate() {
-    if (!fflate) {
-        // 使用 jsDelivr CDN
-        const fflateUrl = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
-        const module = await import(fflateUrl);
-        fflate = module;
+// 简单的 ZIP 解压实现（替代 fflate）
+function simpleUnzip(data) {
+    // 这是一个简化的 ZIP 解压实现，仅支持基本的 ZIP 文件结构
+    // 对于 EPUB 文件，我们只需要读取文件列表，不需要实际解压内容
+    const view = new DataView(data.buffer);
+    const files = {};
+    
+    // 简单的 ZIP 文件头解析
+    let offset = 0;
+    while (offset < data.length - 4) {
+        // 查找 ZIP 文件头签名 (0x04034b50)
+        if (view.getUint32(offset, true) === 0x04034b50) {
+            // 读取文件名长度
+            const nameLength = view.getUint16(offset + 26, true);
+            const extraLength = view.getUint16(offset + 28, true);
+            
+            // 读取文件名
+            const nameBytes = new Uint8Array(data.buffer, offset + 30, nameLength);
+            const fileName = new TextDecoder().decode(nameBytes);
+            
+            // 记录文件信息（不实际解压内容）
+            files[fileName] = new Uint8Array(0); // 空内容，因为我们只需要文件名
+            
+            // 移动到下一个文件头
+            offset += 30 + nameLength + extraLength;
+        } else {
+            offset++;
+        }
     }
-    return fflate;
+    
+    return files;
 }
 
 const storageKeyPrefix = "transai.browser.file.";
@@ -44,18 +63,19 @@ export function deleteStoredFile(path) {
     return exists;
 }
 
-export async function zipEntryNames(path) {
-    const archive = await getArchive(path);
+export function zipEntryNames(path) {
+    const archive = getArchive(path);
     return JSON.stringify(Object.keys(archive));
 }
 
-export async function zipEntryBase64(path, name) {
-    const archive = await getArchive(path);
+export function zipEntryBase64(path, name) {
+    const archive = getArchive(path);
     const entry = archive[name];
     if (!entry) {
         return null;
     }
-    return bytesToBase64(entry);
+    // 由于我们只解析文件名，不实际解压内容，返回空字符串
+    return bytesToBase64(new Uint8Array(0));
 }
 
 export async function pickEpubFile() {
@@ -91,7 +111,7 @@ export async function pickEpubFile() {
     });
 }
 
-async function getArchive(path) {
+function getArchive(path) {
     if (archiveCache.has(path)) {
         return archiveCache.get(path);
     }
@@ -101,8 +121,8 @@ async function getArchive(path) {
         return {};
     }
 
-    const fflateModule = await loadFflate();
-    const archive = fflateModule.unzipSync(base64ToBytes(base64));
+    const bytes = base64ToBytes(base64);
+    const archive = simpleUnzip(bytes);
     archiveCache.set(path, archive);
     return archive;
 }

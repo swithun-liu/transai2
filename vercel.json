@@ -1,10 +1,21 @@
 {
   "version": 2,
-  "buildCommand": "./gradlew :composeApp:wasmJsBrowserDistribution -Dorg.gradle.java.home=/opt/buildhome/.java/17",
-  "outputDirectory": "composeApp/build/distributions/wasmJs",
-  "installCommand": "npm config set registry https://registry.npmmirror.com/ && yarn config set registry https://registry.npmmirror.com/",
+  "builds": [
+    {
+      "src": "dist/**/*",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/dist/$1"
+    }
+  ],
+  "buildCommand": "echo '使用预构建的静态文件'",
+  "outputDirectory": "dist",
+  "installCommand": "echo '跳过安装步骤'",
   "env": {
-    "JAVA_HOME": "/opt/buildhome/.java/17",
     "NODE_VERSION": "18"
   }
 }

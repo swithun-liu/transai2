@@ -75,7 +75,7 @@ kotlin {
             implementation(libs.ktor.client.darwin)
         }
         wasmJsMain.dependencies {
-            implementation(npm("fflate", "0.8.2"))
+            // 移除 fflate 依赖，使用自定义 ZIP 解压实现
         }
     }
 }
