@@ -123,39 +123,22 @@
 
 ---
 
-## 🌐 双仓库部署
+## 🌐 项目部署
 
-项目同时维护 GitHub 和 Gitee 仓库，支持国内快速访问。
+项目使用单一 GitHub 仓库进行管理，支持多种部署方案。
 
 ### 仓库地址
 - **GitHub**: https://github.com/swithun-liu/transai2
-- **Gitee**: https://gitee.com/swithun_liu/transai2
 
-### 推送方式
+### 代码推送
 
-#### 一键推送（推荐）
-```bash
-# 同时推送到 GitHub 和 Gitee
-./push-to-both.sh
-```
-
-#### 分别推送
 ```bash
 # 推送到 GitHub
 git push origin master
 
-# 推送到 Gitee
-git push gitee master
-```
-
-#### 配置多仓库推送
-```bash
-# 设置 origin 同时推送到两个仓库
-git remote set-url --add --push origin git@github.com:swithun-liu/transai2.git
-git remote set-url --add --push origin git@gitee.com:swithun_liu/transai2.git
-
-# 之后只需 git push 即可
-git push
+# 或者设置别名简化推送
+git config alias.p 'push origin master'
+git p  # 一键推送
 ```
 
 ### Gitee Pages 部署
