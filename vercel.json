@@ -1,17 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "composeApp/build/distributions/wasmJs/**/*",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/composeApp/build/distributions/wasmJs/$1"
-    }
-  ],
   "buildCommand": "./gradlew :composeApp:wasmJsBrowserDistribution",
   "outputDirectory": "composeApp/build/distributions/wasmJs",
   "installCommand": "npm config set registry https://registry.npmmirror.com/ && yarn config set registry https://registry.npmmirror.com/",
