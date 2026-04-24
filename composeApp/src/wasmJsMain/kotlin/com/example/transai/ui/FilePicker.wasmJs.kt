@@ -17,10 +17,26 @@ actual fun rememberFilePicker(onFilePicked: (String) -> Unit): () -> Unit {
     val scope = rememberCoroutineScope()
     return {
         scope.launch {
-            val payloadJson = WebBridge.pickEpubFile().await() as? String ?: return@launch
+            println("File picker triggered")
+            val payloadJson = WebBridge.pickEpubFile().await() as? String
+            
+            if (payloadJson == null) {
+                println("No file selected or file read failed")
+                return@launch
+            }
+            
+            println("File data received, parsing...")
             val payload = Json.decodeFromString<PickedFilePayload>(payloadJson)
+            println("File name: ${payload.name}, size: ${payload.base64.length}")
+            
             val bytes = Base64.decode(payload.base64)
-            onFilePicked(saveTempFile(payload.name, bytes))
+            println("Decoded bytes size: ${bytes.size}")
+            
+            val savedPath = saveTempFile(payload.name, bytes)
+            println("File saved to: $savedPath")
+            
+            onFilePicked(savedPath)
+            println("File picked callback executed")
         }
     }
 }

@@ -89,15 +89,23 @@ export async function pickEpubFile() {
 
         input.onchange = async () => {
             const file = input.files?.item(0);
+            console.log("File selected:", file?.name, file?.size);
+            
             if (!file) {
+                console.log("No file selected");
                 cleanup();
                 resolve(null);
                 return;
             }
 
             try {
+                console.log("Reading file as base64...");
                 const base64 = await readFileAsBase64(file);
-                resolve(JSON.stringify({ name: file.name, base64 }));
+                console.log("File read successfully, size:", base64.length);
+                
+                const result = JSON.stringify({ name: file.name, base64 });
+                console.log("Resolving with file data");
+                resolve(result);
             } catch (error) {
                 console.error("Failed to read selected file", error);
                 resolve(null);
@@ -107,6 +115,7 @@ export async function pickEpubFile() {
         };
 
         document.body?.appendChild(input);
+        console.log("Opening file picker...");
         input.click();
     });
 }
