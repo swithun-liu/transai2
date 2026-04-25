@@ -8,6 +8,7 @@ import com.example.transai.domain.usecase.ParseBookUseCase
 import com.example.transai.platform.saveTempFile
 import com.example.transai.platform.saveBookToSandbox
 import com.example.transai.platform.deleteFile
+import com.example.transai.platform.fileExists
 import com.example.transai.platform.openInExplorer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,8 +33,18 @@ class BookshelfViewModel(
     @OptIn(ExperimentalResourceApi::class)
     private fun checkAndLoadSampleBook() {
         viewModelScope.launch(Dispatchers.Default) {
-            // Only add sample book if the bookshelf is empty
-            if (bookRepository.books.value.isEmpty()) {
+            val books = bookRepository.books.value
+            val sampleBook = books.firstOrNull { it.filePath.endsWith("/sample.epub") }
+
+            if (sampleBook != null && fileExists(sampleBook.filePath)) {
+                return@launch
+            }
+
+            if (sampleBook != null) {
+                bookRepository.removeBook(sampleBook.filePath)
+            }
+
+            if (bookRepository.books.value.isEmpty() || sampleBook != null) {
                 try {
                     val bytes = Res.readBytes("files/sample.epub")
                     val tempPath = saveTempFile("sample.epub", bytes)
