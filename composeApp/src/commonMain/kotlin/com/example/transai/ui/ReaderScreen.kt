@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -63,7 +65,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -89,6 +95,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var wordPopupAnchor by remember { mutableStateOf<WordPopupAnchor?>(null) }
     var wordPopupOffset by remember { mutableStateOf<IntOffset?>(null) }
     var showCharactersDialog by remember { mutableStateOf(false) }
+    var focusedCharacterName by remember { mutableStateOf<String?>(null) }
 
     rememberPopupOffset(
         anchor = wordPopupAnchor,
@@ -168,7 +175,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { showCharactersDialog = true }) {
+                        IconButton(
+                            onClick = {
+                                focusedCharacterName = null
+                                showCharactersDialog = true
+                            }
+                        ) {
                             Icon(Icons.Default.Person, contentDescription = "Characters")
                         }
                     }
@@ -196,6 +208,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         ) { paragraph ->
                             ParagraphItem(
                                 paragraph = paragraph,
+                                personNotes = uiState.personNotes,
                                 onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) },
                                 onWordTap = { word, localOffset ->
                                     wordPopupAnchor = WordPopupAnchor(paragraph.id, localOffset)
@@ -206,6 +219,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                             context = paragraph.originalText
                                         )
                                     )
+                                },
+                                onCharacterTap = { note ->
+                                    focusedCharacterName = note.name
+                                    showCharactersDialog = true
                                 },
                                 onCoordinatesChanged = { coordinates ->
                                     if (coordinates == null) {
@@ -243,6 +260,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     if (showCharactersDialog) {
                         CharactersDialog(
                             personNotes = uiState.personNotes,
+                            focusedCharacterName = focusedCharacterName,
                             onDismiss = { showCharactersDialog = false }
                         )
                     }
@@ -285,11 +303,16 @@ private fun rememberPopupOffset(
 @Composable
 fun ParagraphItem(
     paragraph: Paragraph,
+    personNotes: List<com.example.transai.model.PersonNote>,
     onToggle: () -> Unit,
     onWordTap: (String, Offset) -> Unit,
+    onCharacterTap: (com.example.transai.model.PersonNote) -> Unit,
     onCoordinatesChanged: (LayoutCoordinates?) -> Unit
 ) {
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val annotatedText = remember(paragraph.originalText, personNotes) {
+        buildHighlightedParagraphText(paragraph.originalText, personNotes)
+    }
     DisposableEffect(Unit) {
         onDispose { onCoordinatesChanged(null) }
     }
@@ -301,20 +324,36 @@ fun ParagraphItem(
         Row(verticalAlignment = Alignment.Top) {
             SelectionContainer(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = paragraph.originalText,
+                    text = annotatedText,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         lineHeight = 24.sp,
                         fontSize = 18.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
-                        .pointerInput(paragraph.originalText) {
+                        .pointerInput(annotatedText) {
                             detectTapGestures { position ->
                                 val result = layoutResult ?: return@detectTapGestures
                                 val offset = result.getOffsetForPosition(position)
+                                val characterNote = annotatedText
+                                    .getStringAnnotations(
+                                        tag = CHARACTER_ANNOTATION_TAG,
+                                        start = offset,
+                                        end = (offset + 1).coerceAtMost(annotatedText.length)
+                                    )
+                                    .firstOrNull()
+                                    ?.let { annotation ->
+                                        personNotes.firstOrNull {
+                                            normalizeCharacterName(it.name) == annotation.item
+                                        }
+                                    }
+                                if (characterNote != null) {
+                                    onCharacterTap(characterNote)
+                                    return@detectTapGestures
+                                }
                                 val word = findWordAt(paragraph.originalText, offset)
                                 if (word != null) {
-                                onWordTap(word, position)
+                                    onWordTap(word, position)
                                 }
                             }
                         }
@@ -479,7 +518,27 @@ fun isWordChar(char: Char): Boolean {
 }
 
 @Composable
-fun CharactersDialog(personNotes: List<com.example.transai.model.PersonNote>, onDismiss: () -> Unit) {
+fun CharactersDialog(
+    personNotes: List<com.example.transai.model.PersonNote>,
+    focusedCharacterName: String?,
+    onDismiss: () -> Unit
+) {
+    val listState = rememberLazyListState()
+    val focusedNameKey = remember(focusedCharacterName) {
+        focusedCharacterName?.let(::normalizeCharacterName)
+    }
+    val focusedIndex = remember(personNotes, focusedNameKey) {
+        if (focusedNameKey == null) {
+            -1
+        } else {
+            personNotes.indexOfFirst { normalizeCharacterName(it.name) == focusedNameKey }
+        }
+    }
+    LaunchedEffect(focusedIndex) {
+        if (focusedIndex >= 0) {
+            listState.scrollToItem(focusedIndex)
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Characters") },
@@ -491,9 +550,25 @@ fun CharactersDialog(personNotes: List<com.example.transai.model.PersonNote>, on
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                LazyColumn {
-                    items(personNotes) { note ->
-                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.heightIn(max = 360.dp)
+                ) {
+                    itemsIndexed(personNotes) { index, note ->
+                        val isFocused = index == focusedIndex
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = if (isFocused) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    },
+                                    shape = MaterialTheme.shapes.small
+                                )
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
                             Text(note.name, style = MaterialTheme.typography.titleMedium)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -511,4 +586,65 @@ fun CharactersDialog(personNotes: List<com.example.transai.model.PersonNote>, on
             TextButton(onClick = onDismiss) { Text("关闭") }
         }
     )
+}
+
+private const val CHARACTER_ANNOTATION_TAG = "character"
+
+private fun buildHighlightedParagraphText(
+    text: String,
+    personNotes: List<com.example.transai.model.PersonNote>
+): AnnotatedString {
+    val candidates = personNotes
+        .mapNotNull { note ->
+            val trimmedName = note.name.trim()
+            if (trimmedName.isBlank()) {
+                null
+            } else {
+                normalizeCharacterName(trimmedName) to trimmedName
+            }
+        }
+        .distinctBy { it.first }
+        .sortedByDescending { it.second.length }
+
+    if (candidates.isEmpty()) {
+        return AnnotatedString(text)
+    }
+
+    return buildAnnotatedString {
+        var currentIndex = 0
+        while (currentIndex < text.length) {
+            val match = candidates.firstOrNull { (_, name) ->
+                text.regionMatches(
+                    thisOffset = currentIndex,
+                    other = name,
+                    otherOffset = 0,
+                    length = name.length,
+                    ignoreCase = true
+                )
+            }
+            if (match == null) {
+                append(text[currentIndex])
+                currentIndex++
+            } else {
+                val (nameKey, name) = match
+                val nextIndex = currentIndex + name.length
+                pushStringAnnotation(tag = CHARACTER_ANNOTATION_TAG, annotation = nameKey)
+                pushStyle(
+                    SpanStyle(
+                        background = androidx.compose.ui.graphics.Color(0x66FFD54F),
+                        color = androidx.compose.ui.graphics.Color.Unspecified,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                )
+                append(text.substring(currentIndex, nextIndex))
+                pop()
+                pop()
+                currentIndex = nextIndex
+            }
+        }
+    }
+}
+
+private fun normalizeCharacterName(name: String): String {
+    return name.trim().lowercase()
 }
