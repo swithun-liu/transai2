@@ -245,18 +245,22 @@ export function zipEntryBase64(path, name) {
         // 对于 EPUB 文件，我们需要返回有效的文件内容
         // 这里我们返回一个简单的 XML 内容作为占位符
         if (name === "META-INF/container.xml") {
-            const containerXml = `<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`;
+            // 使用单行 XML 避免换行符问题
+            const containerXml = '<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>';
             const encoder = new TextEncoder();
-            return bytesToBase64(encoder.encode(containerXml));
+            const encodedBytes = encoder.encode(containerXml);
+            console.log("Encoding container.xml, size:", encodedBytes.length);
+            const base64Result = bytesToBase64(encodedBytes);
+            console.log("Base64 result length:", base64Result.length);
+            return base64Result;
         }
         
         // 对于其他文件，返回一个简单的占位符
-        return bytesToBase64(new Uint8Array([0x45, 0x50, 0x55, 0x42])); // "EPUB" 的 ASCII
+        const placeholderBytes = new Uint8Array([0x45, 0x50, 0x55, 0x42]); // "EPUB" 的 ASCII
+        console.log("Encoding placeholder for", name, "size:", placeholderBytes.length);
+        const base64Result = bytesToBase64(placeholderBytes);
+        console.log("Base64 result length:", base64Result.length);
+        return base64Result;
     } catch (error) {
         console.error("Error getting zip entry base64:", error);
         return null;
@@ -340,11 +344,10 @@ function readFileAsBase64(file) {
 }
 
 function bytesToBase64(bytes) {
+    // 简单的 Base64 编码方法
     let binary = "";
-    const chunkSize = 0x8000;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
-        binary += String.fromCharCode(...chunk);
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
 }
