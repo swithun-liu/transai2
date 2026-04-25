@@ -14,14 +14,18 @@ actual class ZipArchive actual constructor(private val filePath: String) {
     try {
         val encoded = WebBridge.zipEntryBase64(filePath, name)
         
-        // 简单的 null 检查
+        // 安全的 null 检查
         if (encoded == null) {
             println("zipEntryBase64 returned null for: $name")
             return null
         }
         
-        // 强制转换为字符串并解码
-        val encodedString = encoded.toString()
+        // 使用安全的类型转换
+        val encodedString = when (encoded) {
+            is String -> encoded
+            else -> encoded.toString()
+        }
+        
         println("Decoding base64 for $name, string length: ${encodedString.length}")
         
         return Base64.decode(encodedString)
@@ -35,14 +39,18 @@ actual fun entryNames(): List<String> {
     try {
         val namesJson = WebBridge.zipEntryNames(filePath)
         
-        // 简单的 null 检查
+        // 安全的 null 检查
         if (namesJson == null) {
             println("zipEntryNames returned null")
             return emptyList()
         }
         
-        // 强制转换为字符串并解析
-        val jsonString = namesJson.toString()
+        // 使用安全的类型转换
+        val jsonString = when (namesJson) {
+            is String -> namesJson
+            else -> namesJson.toString()
+        }
+        
         println("Parsing zip entry names, JSON length: ${jsonString.length}")
         
         return json.decodeFromString(jsonString)

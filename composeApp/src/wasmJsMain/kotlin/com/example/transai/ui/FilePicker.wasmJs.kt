@@ -7,6 +7,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.example.transai.platform.WebBridge
 import com.example.transai.platform.saveTempFile
 import kotlin.io.encoding.Base64
+import kotlin.js.JsAny
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.await
 import kotlinx.serialization.Serializable
@@ -18,11 +19,17 @@ actual fun rememberFilePicker(onFilePicked: (String) -> Unit): () -> Unit {
     return {
         scope.launch {
             println("File picker triggered")
-            val payloadJson = WebBridge.pickEpubFile().await() as? String
+            val payloadResult = WebBridge.pickEpubFile().await<JsAny?>()
             
-            if (payloadJson == null) {
+            if (payloadResult == null) {
                 println("No file selected or file read failed")
                 return@launch
+            }
+            
+            // 安全的类型转换
+            val payloadJson = when (payloadResult) {
+                is String -> payloadResult
+                else -> payloadResult.toString()
             }
             
             println("File data received, parsing...")
