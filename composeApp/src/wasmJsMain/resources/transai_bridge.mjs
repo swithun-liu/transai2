@@ -99,6 +99,7 @@ function fallbackParse(data) {
 const tempPathPrefix = "browser://temp/";
 const bookPathPrefix = "browser://books/";
 const archiveCache = new Map();
+const inMemoryFileCache = new Map();
 
 // IndexedDB 数据库
 const DB_NAME = "TransAIFiles";
@@ -181,61 +182,52 @@ export function createBookPath(name) {
     return `${bookPathPrefix}${randomId()}/${sanitizeFileName(name)}`;
 }
 
-export async function saveFile(path, base64) {
+export function saveFile(path, base64) {
+    // Kotlin/Wasm expects sync return. Store in memory immediately so ZIP reads work right away.
+    inMemoryFileCache.set(path, base64);
+    archiveCache.delete(path);
+
+    // Best-effort persistence: localStorage (fast sync) + IndexedDB (async, for larger files).
     try {
-        await saveToDB(storageKey(path), base64);
-        archiveCache.delete(path);
-    } catch (error) {
-        console.error("Error saving file to IndexedDB:", error);
-        // 回退到 localStorage
         localStorage.setItem(storageKey(path), base64);
+    } catch (_) {
+        // Ignore quota errors.
+    }
+    saveToDB(storageKey(path), base64).catch((error) => {
+        console.error("Error saving file to IndexedDB:", error);
+    });
+}
+
+export function readFile(path) {
+    // Kotlin/Wasm expects sync return.
+    if (inMemoryFileCache.has(path)) return inMemoryFileCache.get(path);
+    try {
+        return localStorage.getItem(storageKey(path));
+    } catch (_) {
+        return null;
     }
 }
 
-export async function readFile(path) {
-    try {
-        const result = await readFromDB(storageKey(path));
-        if (result) return result;
-        
-        // 回退到 localStorage
-        return localStorage.getItem(storageKey(path));
-    } catch (error) {
-        console.error("Error reading file from IndexedDB:", error);
-        return localStorage.getItem(storageKey(path));
-    }
-}
+export function deleteStoredFile(path) {
+    const key = storageKey(path);
+    inMemoryFileCache.delete(path);
+    archiveCache.delete(path);
 
-export async function deleteStoredFile(path) {
     try {
-        await deleteFromDB(storageKey(path));
-        const key = storageKey(path);
-        const exists = localStorage.getItem(key) !== null;
-        if (exists) {
-            localStorage.removeItem(key);
-        }
-        archiveCache.delete(path);
-        return true;
-    } catch (error) {
+        localStorage.removeItem(key);
+    } catch (_) {
+        // Ignore
+    }
+    deleteFromDB(key).catch((error) => {
         console.error("Error deleting file from IndexedDB:", error);
-        return false;
-    }
+    });
+    return true;
 }
 
 export function zipEntryNames(path) {
     try {
-        console.log("zipEntryNames called for:", path);
-        
-        // 直接返回 EPUB 文件的标准文件列表
-        const epubFiles = [
-            "mimetype",
-            "META-INF/container.xml",
-            "OEBPS/content.opf",
-            "OEBPS/chapter1.xhtml",
-            "OEBPS/styles.css"
-        ];
-        
-        console.log("Returning EPUB file list:", epubFiles);
-        return JSON.stringify(epubFiles);
+        const archive = getArchive(path);
+        return JSON.stringify(Object.keys(archive.entries));
     } catch (error) {
         console.error("Error getting zip entry names:", error);
         return JSON.stringify([]);
@@ -244,107 +236,12 @@ export function zipEntryNames(path) {
 
 export function zipEntryBase64(path, name) {
     try {
-        console.log("zipEntryBase64 called for:", path, name);
-        
-        // 直接返回有效的 Base64 字符串，避免复杂的 ZIP 解析
-        if (name === "META-INF/container.xml") {
-            // 返回一个有效的 EPUB container.xml 内容的 Base64
-            const validBase64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPGNvbnRhaW5lciB2ZXJzaW9uPSIxLjAiIHhtbG5zPSJ1cm46b2FzaXM6bmFtZXM6dGM6b3BlbmRvY3VtZW50OnhtbG5zOmNvbnRhaW5lciI+CiAgPHJvb3RmaWxlcz4KICAgIDxyb290ZmlsZSBmdWxsLXBhdGg9Ik9FQlBTL2NvbnRlbnQub3BmIiBtZWRpYS10eXBlPSJhcHBsaWNhdGlvbi9vZWJwcy1wYWNrYWdleCt4bWwiLz4KICA8L3Jvb3RmaWxlcz4KPC9jb250YWluZXI+";
-            console.log("Returning pre-encoded container.xml Base64");
-            return validBase64;
-        }
-        
-        if (name === "OEBPS/content.opf") {
-            // 返回一个有效的 content.opf 文件内容
-            const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="bookid">urn:uuid:12345678-1234-1234-1234-123456789012</dc:identifier>
-    <dc:title>Murder on the Orient Express</dc:title>
-    <dc:creator>Agatha Christie</dc:creator>
-    <dc:language>en</dc:language>
-    <meta property="dcterms:modified">2024-01-01T00:00:00Z</meta>
-  </metadata>
-  <manifest>
-    <item id="toc" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
-    <item id="css" href="styles.css" media-type="text/css"/>
-  </manifest>
-  <spine>
-    <itemref idref="chapter1"/>
-  </spine>
-</package>`;
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(contentOpf);
-            const base64 = bytesToBase64(bytes);
-            console.log("Returning content.opf Base64");
-            return base64;
-        }
-        
-        if (name === "OEBPS/chapter1.xhtml") {
-            // 返回实际的书籍内容
-            const chapterContent = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <title>Chapter 1</title>
-  <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-  <h1>Chapter 1</h1>
-  <p>It was five o'clock on a winter's morning in Syria. Alongside the platform at Aleppo stood the train grandly designated in railway guides as the Taurus Express. It consisted of a kitchen and dining-car, a sleeping-car and two local coaches.</p>
-  <p>By the step leading up into the sleeping-car stood a young French lieutenant, resplendent in uniform, conversing with a small man, muffled up to the ears of whom nothing was visible but a pink-tipped nose and the two points of an upward-curled moustache.</p>
-  <p>It was freezingly cold, and this fact was the subject of pitying comment on the part of the lieutenant.</p>
-  <p>"You are going to be very cold, Monsieur," he said. "England is not at all like this."</p>
-  <p>"That is true," said the other. "In England it rains. It does not freeze like this."</p>
-  <p>"You have been in England, then?"</p>
-  <p>"I have been there, yes."</p>
-  <p>The lieutenant changed the subject.</p>
-  <p>"You are going to Constantinople?"</p>
-  <p>"Yes, I am going to Constantinople."</p>
-  <p>"And then?"</p>
-  <p>"I go on to the Orient Express."</p>
-  <p>"Ah! You are going to Paris?"</p>
-  <p>"No, I am going to London."</p>
-  <p>"You are English?"</p>
-  <p>"No, I am Belgian."</p>
-  <p>"Ah, Belgian. That is the same thing."</p>
-  <p>The little man smiled. "Not quite," he said.</p>
-</body>
-</html>`;
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(chapterContent);
-            const base64 = bytesToBase64(bytes);
-            console.log("Returning chapter1.xhtml Base64");
-            return base64;
-        }
-        
-        if (name === "OEBPS/styles.css") {
-            // 返回简单的 CSS 样式
-            const cssContent = `body { font-family: serif; line-height: 1.6; margin: 2em; }
-h1 { color: #333; }
-p { margin-bottom: 1em; }`;
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(cssContent);
-            const base64 = bytesToBase64(bytes);
-            console.log("Returning styles.css Base64");
-            return base64;
-        }
-        
-        if (name === "mimetype") {
-            // 返回 EPUB mimetype
-            const mimetype = "application/epub+zip";
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(mimetype);
-            const base64 = bytesToBase64(bytes);
-            console.log("Returning mimetype Base64");
-            return base64;
-        }
-        
-        // 对于其他文件，返回一个简单的有效 Base64 字符串
-        const validBase64 = "RVBVQg=="; // "EPUB" 的 Base64
-        console.log("Returning placeholder Base64 for:", name);
-        return validBase64;
+        const archive = getArchive(path);
+        const entry = archive.entries[name];
+        if (!entry) return null;
+
+        const fileBytes = extractZipEntry(archive.data, entry);
+        return bytesToBase64(fileBytes);
     } catch (error) {
         console.error("Error getting zip entry base64:", error);
         return null;
@@ -401,13 +298,282 @@ function getArchive(path) {
     const base64 = readFile(path);
     if (!base64) {
         console.warn(`File not found in storage: ${path}`);
-        return {};
+        return { data: new Uint8Array(0), entries: {} };
     }
 
     const bytes = base64ToBytes(base64);
-    const archive = simpleUnzip(bytes);
+    const archive = parseZipCentralDirectory(bytes);
     archiveCache.set(path, archive);
     return archive;
+}
+
+function parseZipCentralDirectory(data) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const eocdOffset = findEndOfCentralDirectory(data);
+    if (eocdOffset === -1) {
+        throw new Error("Invalid ZIP: end of central directory not found");
+    }
+
+    const centralDirOffset = view.getUint32(eocdOffset + 16, true);
+    const entries = {};
+    let offset = centralDirOffset;
+
+    // Central directory file header signature (0x02014b50)
+    while (offset + 46 <= data.length && view.getUint32(offset, true) === 0x02014b50) {
+        const compression = view.getUint16(offset + 10, true);
+        const compressedSize = view.getUint32(offset + 20, true);
+        const uncompressedSize = view.getUint32(offset + 24, true);
+        const nameLength = view.getUint16(offset + 28, true);
+        const extraLength = view.getUint16(offset + 30, true);
+        const commentLength = view.getUint16(offset + 32, true);
+        const localHeaderOffset = view.getUint32(offset + 42, true);
+
+        const nameBytes = data.subarray(offset + 46, offset + 46 + nameLength);
+        const fileName = new TextDecoder().decode(nameBytes);
+        entries[fileName] = {
+            name: fileName,
+            compression,
+            compressedSize,
+            uncompressedSize,
+            localHeaderOffset
+        };
+
+        offset += 46 + nameLength + extraLength + commentLength;
+    }
+
+    return { data, entries };
+}
+
+function findEndOfCentralDirectory(data) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    // EOCD min size is 22 bytes. Comment length can extend it; search backwards.
+    for (let offset = data.length - 22; offset >= 0; offset--) {
+        if (view.getUint32(offset, true) === 0x06054b50) return offset;
+    }
+    return -1;
+}
+
+function extractZipEntry(data, entry) {
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const off = entry.localHeaderOffset;
+    if (off + 30 > data.length || view.getUint32(off, true) !== 0x04034b50) {
+        throw new Error(`Invalid ZIP: local header not found for ${entry.name}`);
+    }
+
+    const nameLength = view.getUint16(off + 26, true);
+    const extraLength = view.getUint16(off + 28, true);
+    const dataStart = off + 30 + nameLength + extraLength;
+    const dataEnd = dataStart + entry.compressedSize;
+    if (dataEnd > data.length) {
+        throw new Error(`Invalid ZIP: data out of range for ${entry.name}`);
+    }
+
+    const compressed = data.subarray(dataStart, dataEnd);
+    if (entry.compression === 0) {
+        return compressed;
+    }
+    if (entry.compression === 8) {
+        // ZIP uses raw DEFLATE stream.
+        return inflateRaw(compressed, entry.uncompressedSize);
+    }
+    throw new Error(`Unsupported compression method ${entry.compression} for ${entry.name}`);
+}
+
+// Minimal raw DEFLATE inflater (sync). Based on a small subset of MIT-licensed inflate logic.
+// Supports the EPUB files used by this project (store + deflate).
+function inflateRaw(data, expectedSize) {
+    // --- begin tiny inflater ---
+    // This is a compact raw DEFLATE implementation adapted for browser usage.
+    // It intentionally handles only common cases (no preset dictionary).
+    const u8 = data;
+    let pos = 0;
+    let bitbuf = 0, bitcnt = 0;
+    const out = new Uint8Array(expectedSize > 0 ? expectedSize : (u8.length * 6));
+    let outpos = 0;
+
+    function bits(n) {
+        while (bitcnt < n) {
+            if (pos >= u8.length) throw new Error("Unexpected end of deflate data");
+            bitbuf |= u8[pos++] << bitcnt;
+            bitcnt += 8;
+        }
+        const val = bitbuf & ((1 << n) - 1);
+        bitbuf >>>= n;
+        bitcnt -= n;
+        return val;
+    }
+
+    function alignByte() {
+        bitbuf = 0;
+        bitcnt = 0;
+    }
+
+    function readU16() {
+        if (pos + 2 > u8.length) throw new Error("Unexpected end of deflate data");
+        const v = u8[pos] | (u8[pos + 1] << 8);
+        pos += 2;
+        return v;
+    }
+
+    function ensureOut(n) {
+        if (outpos + n <= out.length) return out;
+        // grow
+        const next = new Uint8Array(Math.max(out.length * 2, outpos + n));
+        next.set(out.subarray(0, outpos), 0);
+        // copy reference to outer via closure is not possible; return next for caller to swap
+        return next;
+    }
+
+    // Huffman helpers
+    function buildHuff(lengths, maxBits) {
+        const count = new Uint16Array(maxBits + 1);
+        for (let i = 0; i < lengths.length; i++) count[lengths[i]]++;
+        const offs = new Uint16Array(maxBits + 1);
+        let sum = 0;
+        for (let i = 1; i <= maxBits; i++) {
+            sum += count[i - 1];
+            offs[i] = sum;
+        }
+        const sym = new Uint16Array(sum + count[maxBits]);
+        for (let i = 0; i < lengths.length; i++) {
+            const l = lengths[i];
+            if (l) sym[offs[l]++] = i;
+        }
+        // reset offs
+        sum = 0;
+        for (let i = 1; i <= maxBits; i++) {
+            sum += count[i - 1];
+            offs[i] = sum;
+        }
+        return { count, offs, sym };
+    }
+
+    function decode(h, maxBits) {
+        let code = 0, first = 0, index = 0;
+        for (let len = 1; len <= maxBits; len++) {
+            code |= bits(1);
+            const c = h.count[len];
+            if (code - first < c) return h.sym[h.offs[len] + (code - first)];
+            index += c;
+            first = (first + c) << 1;
+            code <<= 1;
+        }
+        throw new Error("Invalid Huffman code");
+    }
+
+    // Fixed Huffman tables
+    const fixedLitLen = (() => {
+        const lengths = new Uint8Array(288);
+        for (let i = 0; i < 144; i++) lengths[i] = 8;
+        for (let i = 144; i < 256; i++) lengths[i] = 9;
+        for (let i = 256; i < 280; i++) lengths[i] = 7;
+        for (let i = 280; i < 288; i++) lengths[i] = 8;
+        return buildHuff(lengths, 9);
+    })();
+    const fixedDist = (() => {
+        const lengths = new Uint8Array(32);
+        lengths.fill(5);
+        return buildHuff(lengths, 5);
+    })();
+
+    const lensBase = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+    const lensExtra = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+    const distBase = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    const distExtra = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+    const codeLenOrder = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+
+    let outRef = out;
+
+    let finalBlock = 0;
+    while (!finalBlock) {
+        finalBlock = bits(1);
+        const type = bits(2);
+
+        if (type === 0) {
+            // stored
+            alignByte();
+            const len = readU16();
+            const nlen = readU16();
+            if (((len ^ 0xFFFF) & 0xFFFF) !== nlen) throw new Error("Invalid stored block length");
+            outRef = ensureOut(len);
+            if (outRef !== out) {
+                // if grown, copy previous output
+                outRef.set(out.subarray(0, outpos), 0);
+            }
+            if (pos + len > u8.length) throw new Error("Unexpected end of stored block");
+            outRef.set(u8.subarray(pos, pos + len), outpos);
+            pos += len;
+            outpos += len;
+            continue;
+        }
+
+        let litH, distH, litMax, distMax;
+        if (type === 1) {
+            litH = fixedLitLen; distH = fixedDist; litMax = 9; distMax = 5;
+        } else if (type === 2) {
+            const hlit = bits(5) + 257;
+            const hdist = bits(5) + 1;
+            const hclen = bits(4) + 4;
+
+            const codeLenLengths = new Uint8Array(19);
+            for (let i = 0; i < hclen; i++) codeLenLengths[codeLenOrder[i]] = bits(3);
+            const codeLenH = buildHuff(codeLenLengths, 7);
+
+            const lengths = new Uint8Array(hlit + hdist);
+            let i = 0;
+            while (i < lengths.length) {
+                const sym = decode(codeLenH, 7);
+                if (sym < 16) {
+                    lengths[i++] = sym;
+                } else if (sym === 16) {
+                    const repeat = bits(2) + 3;
+                    const prev = i ? lengths[i - 1] : 0;
+                    for (let r = 0; r < repeat; r++) lengths[i++] = prev;
+                } else if (sym === 17) {
+                    const repeat = bits(3) + 3;
+                    for (let r = 0; r < repeat; r++) lengths[i++] = 0;
+                } else {
+                    const repeat = bits(7) + 11;
+                    for (let r = 0; r < repeat; r++) lengths[i++] = 0;
+                }
+            }
+
+            const litLenLengths = lengths.subarray(0, hlit);
+            const distLengths = lengths.subarray(hlit);
+            litMax = 0; distMax = 0;
+            for (let k = 0; k < litLenLengths.length; k++) if (litLenLengths[k] > litMax) litMax = litLenLengths[k];
+            for (let k = 0; k < distLengths.length; k++) if (distLengths[k] > distMax) distMax = distLengths[k];
+            litH = buildHuff(litLenLengths, Math.max(litMax, 1));
+            distH = buildHuff(distLengths, Math.max(distMax, 1));
+        } else {
+            throw new Error("Invalid block type");
+        }
+
+        while (true) {
+            const sym = decode(litH, litMax);
+            if (sym < 256) {
+                outRef = ensureOut(1);
+                if (outRef !== out) outRef.set(out.subarray(0, outpos), 0);
+                outRef[outpos++] = sym;
+            } else if (sym === 256) {
+                break;
+            } else {
+                const li = sym - 257;
+                let len = lensBase[li] + bits(lensExtra[li]);
+                const distSym = decode(distH, distMax);
+                let dist = distBase[distSym] + bits(distExtra[distSym]);
+                outRef = ensureOut(len);
+                if (outRef !== out) outRef.set(out.subarray(0, outpos), 0);
+                // copy from back
+                let from = outpos - dist;
+                for (let r = 0; r < len; r++) outRef[outpos++] = outRef[from++]; // handles overlap
+            }
+        }
+    }
+
+    // trim
+    return outRef.subarray(0, outpos);
+    // --- end tiny inflater ---
 }
 
 
@@ -428,10 +594,12 @@ function readFileAsBase64(file) {
 }
 
 function bytesToBase64(bytes) {
-    // 简单的 Base64 编码方法
+    // Base64 encoding with chunking to avoid call stack / memory spikes.
     let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
     }
     return btoa(binary);
 }
