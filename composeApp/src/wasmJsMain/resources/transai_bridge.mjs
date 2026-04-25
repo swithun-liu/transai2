@@ -166,13 +166,64 @@ async function deleteFromDB(key) {
     });
 }
 
+async function listAllFromDB() {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction([STORE_NAME], "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const keysRequest = store.getAllKeys();
+        const valuesRequest = store.getAll();
+
+        let keys = null;
+        let values = null;
+
+        const maybeResolve = () => {
+            if (keys && values) {
+                resolve(keys.map((key, index) => ({ key, value: values[index] })));
+            }
+        };
+
+        keysRequest.onerror = () => reject(keysRequest.error);
+        valuesRequest.onerror = () => reject(valuesRequest.error);
+        keysRequest.onsuccess = () => {
+            keys = keysRequest.result || [];
+            maybeResolve();
+        };
+        valuesRequest.onsuccess = () => {
+            values = valuesRequest.result || [];
+            maybeResolve();
+        };
+    });
+}
+
 function storageKey(path) {
     return `transai_file_${btoa(path)}`;
+}
+
+function hydrateLocalStorageFromIndexedDB() {
+    listAllFromDB()
+        .then((entries) => {
+            for (const entry of entries) {
+                if (!entry || typeof entry.key !== "string" || typeof entry.value !== "string") continue;
+                try {
+                    if (localStorage.getItem(entry.key) == null) {
+                        localStorage.setItem(entry.key, entry.value);
+                    }
+                } catch (_) {
+                    // Ignore quota errors; new files are still available through in-memory cache.
+                }
+            }
+        })
+        .catch((error) => {
+            console.error("Error hydrating files from IndexedDB:", error);
+        });
 }
 
 function randomId() {
     return Math.random().toString(36).substring(2, 15);
 }
+
+hydrateLocalStorageFromIndexedDB();
 
 export function createTempPath(name) {
     return `${tempPathPrefix}${randomId()}/${sanitizeFileName(name)}`;

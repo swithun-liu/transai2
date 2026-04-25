@@ -12,7 +12,7 @@ internal object BrowserFileStore {
     }
 
     fun saveBook(sourcePath: String): String {
-        if (sourcePath.startsWith("browser://book/")) {
+        if (sourcePath.startsWith("browser://books/")) {
             return sourcePath
         }
 
