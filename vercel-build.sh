@@ -25,14 +25,15 @@ echo "🔨 构建 WebAssembly 版本..."
 ./gradlew :composeApp:wasmJsBrowserDistribution
 
 # 检查构建是否成功
-if [ ! -d "composeApp/build/distributions/wasmJs" ]; then
+BUILD_OUTPUT_DIR="composeApp/build/dist/wasmJs/productionExecutable"
+if [ ! -d "$BUILD_OUTPUT_DIR" ]; then
     echo "❌ 构建失败，请检查错误信息"
     exit 1
 fi
 
 echo "✅ 构建成功！"
-echo "📁 输出目录: composeApp/build/distributions/wasmJs/"
+echo "📁 输出目录: $BUILD_OUTPUT_DIR"
 
 # 显示构建文件
 echo "📋 构建文件列表:"
-ls -la composeApp/build/distributions/wasmJs/
+ls -la "$BUILD_OUTPUT_DIR"

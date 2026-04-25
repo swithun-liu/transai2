@@ -3,6 +3,7 @@ package com.example.transai.data
 import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 import com.example.transai.model.WordTranslation
+import com.example.transai.platform.shouldUseAiProxy
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -40,15 +41,23 @@ class TranslationService {
                     Message("user", text)
                 )
             )
-
-            // Normalize base URL
-            val baseUrl = config.baseUrl.trimEnd('/')
-            val endpoint = "$baseUrl/chat/completions"
+            val endpoint = resolveChatCompletionEndpoint(config)
 
             val response: ChatCompletionResponse = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer ${config.apiKey}")
-                setBody(requestBody)
+                if (shouldUseAiProxy()) {
+                    setBody(
+                        ProxyChatCompletionRequest(
+                            baseUrl = config.baseUrl.trimEnd('/'),
+                            apiKey = config.apiKey,
+                            model = config.model,
+                            messages = requestBody.messages
+                        )
+                    )
+                } else {
+                    header("Authorization", "Bearer ${config.apiKey}")
+                    setBody(requestBody)
+                }
             }.body()
 
             val content = response.choices.firstOrNull()?.message?.content?.trim()
@@ -81,14 +90,23 @@ class TranslationService {
                     )
                 )
             )
-
-            val baseUrl = config.baseUrl.trimEnd('/')
-            val endpoint = "$baseUrl/chat/completions"
+            val endpoint = resolveChatCompletionEndpoint(config)
 
             val response: ChatCompletionResponse = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer ${config.apiKey}")
-                setBody(requestBody)
+                if (shouldUseAiProxy()) {
+                    setBody(
+                        ProxyChatCompletionRequest(
+                            baseUrl = config.baseUrl.trimEnd('/'),
+                            apiKey = config.apiKey,
+                            model = config.model,
+                            messages = requestBody.messages
+                        )
+                    )
+                } else {
+                    header("Authorization", "Bearer ${config.apiKey}")
+                    setBody(requestBody)
+                }
             }.body()
 
             val content = response.choices.firstOrNull()?.message?.content?.trim()
@@ -125,12 +143,22 @@ class TranslationService {
                     Message("user", text)
                 )
             )
-            val baseUrl = config.baseUrl.trimEnd('/')
-            val endpoint = "$baseUrl/chat/completions"
+            val endpoint = resolveChatCompletionEndpoint(config)
             val response: ChatCompletionResponse = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer ${config.apiKey}")
-                setBody(requestBody)
+                if (shouldUseAiProxy()) {
+                    setBody(
+                        ProxyChatCompletionRequest(
+                            baseUrl = config.baseUrl.trimEnd('/'),
+                            apiKey = config.apiKey,
+                            model = config.model,
+                            messages = requestBody.messages
+                        )
+                    )
+                } else {
+                    header("Authorization", "Bearer ${config.apiKey}")
+                    setBody(requestBody)
+                }
             }.body()
             val content = response.choices.firstOrNull()?.message?.content?.trim()
             if (content.isNullOrBlank()) {
@@ -183,10 +211,26 @@ class TranslationService {
             cleaned
         }
     }
+
+    private fun resolveChatCompletionEndpoint(config: TranslationConfig): String {
+        return if (shouldUseAiProxy()) {
+            "/api/chat/completions"
+        } else {
+            "${config.baseUrl.trimEnd('/')}/chat/completions"
+        }
+    }
 }
 
 @Serializable
 data class ChatCompletionRequest(
+    val model: String,
+    val messages: List<Message>
+)
+
+@Serializable
+data class ProxyChatCompletionRequest(
+    val baseUrl: String,
+    val apiKey: String,
     val model: String,
     val messages: List<Message>
 )
