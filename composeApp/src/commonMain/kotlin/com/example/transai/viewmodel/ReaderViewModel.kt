@@ -2,6 +2,7 @@ package com.example.transai.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.transai.data.BookRepository
 import com.example.transai.data.PersonNoteRepository
 import com.example.transai.domain.usecase.GetSettingsUseCase
 import com.example.transai.domain.usecase.ParseBookUseCase
@@ -16,6 +17,8 @@ import com.example.transai.data.WordTranslationRepository
 import com.example.transai.model.Paragraph
 import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
+import com.example.transai.platform.fileExists
+import com.example.transai.platform.saveBookToSandbox
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +71,6 @@ class ReaderViewModel(
     }
 
     private fun loadFile(path: String) {
-        currentFilePath = path
         viewModelScope.launch(Dispatchers.Default) {
             _uiState.update { 
                 it.copy(
@@ -81,10 +83,13 @@ class ReaderViewModel(
                 ) 
             }
             try {
-                val metadata = getBookMetadataUseCase(path)
+                val originalMetadata = getBookMetadataUseCase(path)
+                val resolvedPath = resolveReadablePath(path, originalMetadata)
+                currentFilePath = resolvedPath
+                val metadata = getBookMetadataUseCase(resolvedPath) ?: originalMetadata
                 val initialIndex = metadata?.lastReadPosition ?: 0
 
-                val book = parseBookUseCase(path)
+                val book = parseBookUseCase(resolvedPath)
                 
                 val chaptersInfo = mutableListOf<ChapterInfo>()
                 var currentIndex = 0
@@ -129,6 +134,33 @@ class ReaderViewModel(
                 e.printStackTrace()
             }
         }
+    }
+
+    @OptIn(ExperimentalResourceApi::class)
+    private suspend fun resolveReadablePath(
+        requestedPath: String,
+        metadata: com.example.transai.data.model.BookMetadata?
+    ): String {
+        if (fileExists(requestedPath)) {
+            return requestedPath
+        }
+
+        val fileName = requestedPath.substringAfterLast('/')
+        if (fileName == "sample.epub") {
+            val bytes = Res.readBytes("files/sample.epub")
+            val tempPath = saveTempFile("sample.epub", bytes)
+            val savedPath = saveBookToSandbox(tempPath)
+            BookRepository.replaceBookPath(
+                oldPath = requestedPath,
+                newPath = savedPath,
+                title = metadata?.title ?: "Alice's Adventures in Wonderland",
+                lastReadPosition = metadata?.lastReadPosition ?: 0,
+                totalParagraphs = metadata?.totalParagraphs ?: 0
+            )
+            return savedPath
+        }
+
+        throw Exception("Book file is missing. Please re-import it.")
     }
 
     @OptIn(ExperimentalResourceApi::class)

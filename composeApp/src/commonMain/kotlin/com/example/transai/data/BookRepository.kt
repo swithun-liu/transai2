@@ -62,6 +62,31 @@ object BookRepository {
         return _books.value.find { it.filePath == path }
     }
 
+    fun replaceBookPath(
+        oldPath: String,
+        newPath: String,
+        title: String,
+        lastReadPosition: Int = 0,
+        totalParagraphs: Int = 0
+    ) {
+        val currentBooks = _books.value.toMutableList()
+        val index = currentBooks.indexOfFirst { it.filePath == oldPath }
+        val newBook = BookMetadata(
+            filePath = newPath,
+            title = title,
+            lastReadPosition = lastReadPosition,
+            totalParagraphs = totalParagraphs
+        )
+
+        if (index != -1) {
+            currentBooks[index] = newBook
+        } else if (currentBooks.none { it.filePath == newPath }) {
+            currentBooks.add(0, newBook)
+        }
+
+        saveBooks(currentBooks)
+    }
+
     private fun saveBooks(books: List<BookMetadata>) {
         val booksString = json.encodeToString(books)
         settings[booksKey] = booksString
