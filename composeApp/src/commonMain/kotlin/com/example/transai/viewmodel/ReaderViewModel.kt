@@ -21,12 +21,16 @@ import com.example.transai.platform.fileExists
 import com.example.transai.platform.saveBookToSandbox
 import com.example.transai.platform.saveTempFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import transai.composeapp.generated.resources.Res
 
@@ -45,6 +49,12 @@ class ReaderViewModel(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
     
     private var currentFilePath: String? = null
+    private val paragraphTranslationMutex = Mutex()
+    private var batchTranslationJob: Job? = null
+    private var batchTargetParagraphId: Int = -1
+    private val batchInitialCachedParagraphIds = mutableSetOf<Int>()
+    private val batchRequestedParagraphIds = mutableSetOf<Int>()
+    private val batchFailedParagraphIds = mutableSetOf<Int>()
 
     init {
         observeSettings()
@@ -55,6 +65,7 @@ class ReaderViewModel(
             is ReaderUiEvent.LoadFile -> loadFile(event.path)
             ReaderUiEvent.LoadSample -> loadSampleContent()
             is ReaderUiEvent.ToggleTranslation -> toggleTranslation(event.id)
+            is ReaderUiEvent.TranslateToParagraph -> translateToParagraph(event.id)
             is ReaderUiEvent.UpdateConfig -> updateConfig(event)
             is ReaderUiEvent.SaveProgress -> saveProgress(event.index)
             is ReaderUiEvent.SelectWord -> selectWord(event)
@@ -72,6 +83,12 @@ class ReaderViewModel(
 
     private fun loadFile(path: String) {
         viewModelScope.launch(Dispatchers.Default) {
+            batchTranslationJob?.cancel()
+            batchTranslationJob = null
+            batchTargetParagraphId = -1
+            batchInitialCachedParagraphIds.clear()
+            batchRequestedParagraphIds.clear()
+            batchFailedParagraphIds.clear()
             _uiState.update { 
                 it.copy(
                     isLoading = true, 
@@ -79,7 +96,8 @@ class ReaderViewModel(
                     paragraphs = emptyList(),
                     chapters = emptyList(),
                     personNotes = emptyList(),
-                    initialScrollIndex = 0
+                    initialScrollIndex = 0,
+                    batchTranslation = BatchTranslationState()
                 ) 
             }
             try {
@@ -208,47 +226,119 @@ class ReaderViewModel(
                     // Need translation (or retry if previous attempt failed)
                     currentList[index] = p.copy(isExpanded = true, isLoading = true, error = null)
                     _uiState.update { it.copy(paragraphs = currentList) }
-                    translateParagraph(id, p.originalText)
-                    // Note: translateParagraph will save the expansion state as true when it saves the translation
+                    viewModelScope.launch(Dispatchers.Default) {
+                        translateParagraphSerial(path, id, p.originalText, expandAfter = true)
+                    }
                 }
             }
         }
     }
 
-    private fun translateParagraph(id: Int, text: String) {
+    private fun translateToParagraph(id: Int) {
         val path = currentFilePath ?: return
-        viewModelScope.launch {
+        val targetId = id.coerceIn(0, _uiState.value.paragraphs.lastIndex)
+        registerBatchCachedParagraphs(
+            startIdInclusive = if (batchTranslationJob?.isActive == true) batchTargetParagraphId + 1 else 0,
+            endIdInclusive = targetId
+        )
+        batchTargetParagraphId = maxOf(batchTargetParagraphId, targetId)
+        expandTranslatedParagraphsUpTo(path, batchTargetParagraphId)
+        updateBatchTranslationState(isRunning = true)
+
+        if (batchTranslationJob?.isActive == true) {
+            return
+        }
+
+        batchTranslationJob = viewModelScope.launch(Dispatchers.Default) {
+            processBatchTranslationQueue(path)
+        }
+    }
+
+    private suspend fun processBatchTranslationQueue(path: String) {
+        while (true) {
+            val targetId = batchTargetParagraphId
+            if (targetId < 0) break
+
+            val nextParagraph = _uiState.value.paragraphs
+                .firstOrNull { paragraph ->
+                    paragraph.id <= targetId &&
+                        paragraph.translatedText == null &&
+                        paragraph.id !in batchRequestedParagraphIds &&
+                        paragraph.id !in batchFailedParagraphIds
+                }
+
+            if (nextParagraph == null) {
+                break
+            }
+
+            batchRequestedParagraphIds += nextParagraph.id
+            updateBatchTranslationState(
+                isRunning = true,
+                currentParagraphId = nextParagraph.id,
+                currentParagraphPreview = nextParagraph.originalText.take(48)
+            )
+
+            val result = translateParagraphSerial(
+                path = path,
+                id = nextParagraph.id,
+                text = nextParagraph.originalText,
+                expandAfter = true
+            )
+            if (result.isFailure) {
+                batchFailedParagraphIds += nextParagraph.id
+            }
+            updateBatchTranslationState(isRunning = true)
+            delay(150)
+        }
+
+        updateBatchTranslationState(
+            isRunning = false,
+            currentParagraphId = null,
+            currentParagraphPreview = null
+        )
+        batchTargetParagraphId = -1
+        batchInitialCachedParagraphIds.clear()
+        batchRequestedParagraphIds.clear()
+        batchFailedParagraphIds.clear()
+    }
+
+    private suspend fun translateParagraphSerial(
+        path: String,
+        id: Int,
+        text: String,
+        expandAfter: Boolean
+    ): Result<String> {
+        return paragraphTranslationMutex.withLock {
+            val existing = _uiState.value.paragraphs.firstOrNull { it.id == id }
+                ?: return@withLock Result.failure(Exception("Paragraph not found"))
+
+            if (existing.translatedText != null) {
+                if (expandAfter && !existing.isExpanded) {
+                    updateParagraphExpansion(id, true)
+                    TranslationRepository.updateExpansionState(path, id, true)
+                }
+                return@withLock Result.success(existing.translatedText)
+            }
+
+            updateParagraphLoading(id, expandAfter, true, null)
             val config = _uiState.value.config
             val result = translateParagraphUseCase(text, config)
-            
-            _uiState.update { state ->
-                val currentList = state.paragraphs.toMutableList()
-                val index = currentList.indexOfFirst { it.id == id }
-                if (index != -1) {
-                    val updatedParagraph = if (result.isSuccess) {
-                        val translated = result.getOrNull()
-                        if (translated != null) {
-                            TranslationRepository.saveTranslation(path, id, translated)
-                        }
-                        currentList[index].copy(
-                            translatedText = translated,
-                            isLoading = false,
-                            error = null
-                        )
-                    } else {
-                        currentList[index].copy(
-                            isLoading = false,
-                            error = result.exceptionOrNull()?.message ?: "Unknown error"
-                        )
-                    }
-                    currentList[index] = updatedParagraph
-                }
-                state.copy(paragraphs = currentList)
-            }
             if (result.isSuccess) {
-                viewModelScope.launch(Dispatchers.Default) {
+                val translated = result.getOrNull()
+                if (translated != null) {
+                    TranslationRepository.saveTranslation(path, id, translated)
+                    updateParagraphTranslated(id, translated, expandAfter)
                     extractAndSavePersonNotes(path, id, text, config)
+                    Result.success(translated)
+                } else {
+                    val error = "Translation failed: Empty response."
+                    updateParagraphLoading(id, expandAfter, false, error)
+                    Result.failure(Exception(error))
                 }
+            } else {
+                val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                updateParagraphLoading(id, expandAfter, false, error)
+                Result.failure(Exception(error))
             }
         }
     }
@@ -333,6 +423,127 @@ class ReaderViewModel(
 
     private fun dismissWordPopup() {
         _uiState.update { it.copy(wordPopup = null) }
+    }
+
+    private fun updateParagraphExpansion(id: Int, isExpanded: Boolean) {
+        _uiState.update { state ->
+            val updated = state.paragraphs.map { paragraph ->
+                if (paragraph.id == id) paragraph.copy(isExpanded = isExpanded) else paragraph
+            }
+            state.copy(paragraphs = updated)
+        }
+    }
+
+    private fun updateParagraphLoading(id: Int, isExpanded: Boolean, isLoading: Boolean, error: String?) {
+        _uiState.update { state ->
+            val updated = state.paragraphs.map { paragraph ->
+                if (paragraph.id == id) {
+                    paragraph.copy(
+                        isExpanded = isExpanded,
+                        isLoading = isLoading,
+                        error = error
+                    )
+                } else {
+                    paragraph
+                }
+            }
+            state.copy(paragraphs = updated)
+        }
+    }
+
+    private fun updateParagraphTranslated(id: Int, translatedText: String, isExpanded: Boolean) {
+        _uiState.update { state ->
+            val updated = state.paragraphs.map { paragraph ->
+                if (paragraph.id == id) {
+                    paragraph.copy(
+                        translatedText = translatedText,
+                        isExpanded = isExpanded,
+                        isLoading = false,
+                        error = null
+                    )
+                } else {
+                    paragraph
+                }
+            }
+            state.copy(paragraphs = updated)
+        }
+    }
+
+    private fun expandTranslatedParagraphsUpTo(path: String, targetId: Int) {
+        val paragraphIdsToExpand = _uiState.value.paragraphs
+            .filter { it.id <= targetId && it.translatedText != null && !it.isExpanded }
+            .map { it.id }
+
+        if (paragraphIdsToExpand.isEmpty()) return
+
+        _uiState.update { state ->
+            val updated = state.paragraphs.map { paragraph ->
+                if (paragraph.id in paragraphIdsToExpand) {
+                    paragraph.copy(isExpanded = true)
+                } else {
+                    paragraph
+                }
+            }
+            state.copy(paragraphs = updated)
+        }
+
+        viewModelScope.launch(Dispatchers.Default) {
+            paragraphIdsToExpand.forEach { paragraphId ->
+                TranslationRepository.updateExpansionState(path, paragraphId, true)
+            }
+        }
+    }
+
+    private fun registerBatchCachedParagraphs(startIdInclusive: Int, endIdInclusive: Int) {
+        if (startIdInclusive > endIdInclusive) return
+        _uiState.value.paragraphs
+            .filter { paragraph ->
+                paragraph.id in startIdInclusive..endIdInclusive && paragraph.translatedText != null
+            }
+            .forEach { paragraph ->
+                batchInitialCachedParagraphIds += paragraph.id
+            }
+    }
+
+    private fun updateBatchTranslationState(
+        isRunning: Boolean,
+        currentParagraphId: Int? = _uiState.value.batchTranslation.currentParagraphId,
+        currentParagraphPreview: String? = _uiState.value.batchTranslation.currentParagraphPreview
+    ) {
+        val targetId = batchTargetParagraphId
+        if (targetId < 0) {
+            _uiState.update { it.copy(batchTranslation = BatchTranslationState()) }
+            return
+        }
+
+        val paragraphsInRange = _uiState.value.paragraphs.filter { it.id <= targetId }
+        val successfulRequestedCount = batchRequestedParagraphIds.count { requestedId ->
+            paragraphsInRange.any { paragraph ->
+                paragraph.id == requestedId && paragraph.translatedText != null
+            }
+        }
+        val processedCount = (
+            batchInitialCachedParagraphIds.count { cachedId ->
+                paragraphsInRange.any { paragraph -> paragraph.id == cachedId && paragraph.translatedText != null }
+            } + successfulRequestedCount + batchFailedParagraphIds.size
+            ).coerceAtMost(targetId + 1)
+
+        _uiState.update { state ->
+            state.copy(
+                batchTranslation = BatchTranslationState(
+                    isRunning = isRunning,
+                    targetParagraphId = targetId,
+                    totalCount = targetId + 1,
+                    processedCount = processedCount,
+                    cachedCount = batchInitialCachedParagraphIds.size.coerceAtMost(targetId + 1),
+                    requestedCount = batchRequestedParagraphIds.size,
+                    successCount = successfulRequestedCount,
+                    failedCount = batchFailedParagraphIds.size,
+                    currentParagraphId = currentParagraphId,
+                    currentParagraphPreview = currentParagraphPreview
+                )
+            )
+        }
     }
 
     private suspend fun extractAndSavePersonNotes(path: String, paragraphId: Int, text: String, config: TranslationConfig) {

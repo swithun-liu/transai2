@@ -17,7 +17,21 @@ data class ReaderUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val initialScrollIndex: Int = 0,
-    val wordPopup: WordPopupState? = null
+    val wordPopup: WordPopupState? = null,
+    val batchTranslation: BatchTranslationState = BatchTranslationState()
+)
+
+data class BatchTranslationState(
+    val isRunning: Boolean = false,
+    val targetParagraphId: Int = -1,
+    val totalCount: Int = 0,
+    val processedCount: Int = 0,
+    val cachedCount: Int = 0,
+    val requestedCount: Int = 0,
+    val successCount: Int = 0,
+    val failedCount: Int = 0,
+    val currentParagraphId: Int? = null,
+    val currentParagraphPreview: String? = null
 )
 
 data class WordPopupState(
@@ -32,6 +46,7 @@ sealed interface ReaderUiEvent {
     data class LoadFile(val path: String) : ReaderUiEvent
     data object LoadSample : ReaderUiEvent
     data class ToggleTranslation(val id: Int) : ReaderUiEvent
+    data class TranslateToParagraph(val id: Int) : ReaderUiEvent
     data class UpdateConfig(val config: TranslationConfig) : ReaderUiEvent
     data class SaveProgress(val index: Int) : ReaderUiEvent
     data class SelectWord(val paragraphId: Int, val word: String, val context: String) : ReaderUiEvent

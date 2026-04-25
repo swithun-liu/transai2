@@ -3,6 +3,7 @@ package com.example.transai.data
 import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 import com.example.transai.model.WordTranslation
+import com.example.transai.platform.aiProxyEndpoint
 import com.example.transai.platform.shouldUseAiProxy
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -214,7 +215,7 @@ class TranslationService {
 
     private fun resolveChatCompletionEndpoint(config: TranslationConfig): String {
         return if (shouldUseAiProxy()) {
-            "/api/chat/completions"
+            aiProxyEndpoint()
         } else {
             "${config.baseUrl.trimEnd('/')}/chat/completions"
         }

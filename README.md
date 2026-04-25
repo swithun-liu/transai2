@@ -12,6 +12,8 @@
 - **AI 翻译**: 支持 OpenAI, DeepSeek, Gemini, LongCat 等主流模型
 - **EPUB 阅读**: 完整的 EPUB 文件支持，包含《东方快车谋杀案》示例书籍
 - **即时翻译**: 段落翻译和单词释义，基于上下文智能翻译
+- **人物识别**: 自动提取已识别人物并生成角色列表
+- **人物高亮**: 正文中已识别人物会高亮显示，点击可展开并定位到角色列表项
 - **阅读进度**: 自动记录阅读位置，支持书架管理
 
 ---
@@ -31,6 +33,7 @@
 2. 导入 EPUB 文件或使用内置示例书籍
 3. 在设置中配置 AI 模型和 API Key
 4. 开始阅读，点击翻译按钮体验 AI 辅助阅读
+5. 点击正文中的高亮人物名，查看角色列表并快速定位
 
 ---
 
@@ -84,6 +87,21 @@ git push origin master
 - **部署时间**: 约 1-3 分钟
 - **访问地址**: https://transai2.vercel.app
 
+### 免费版使用建议
+
+如果使用 Vercel Hobby 免费版，当前项目最需要关注的是：
+
+- **Git push 触发部署**: 重点看 `Deployments Created per Day = 100/day`
+- **CLI 直接部署**: 重点看 `Deployments Created from CLI per Week = 2000/week`
+- **并发构建**: `Concurrent Builds = 1`，连续推送时会排队
+- **单次构建时长**: `Build Time per Deployment = 45 minutes`
+
+因此日常开发建议：
+
+- 先在本地开发模式验证，再集中推送
+- 不要每个微小改动都立即触发线上部署
+- 构建失败时先看本地日志或 Vercel 日志，不要盲目重复 push
+
 ### ✅ 实际发布时建议按下面执行
 
 #### 命令
@@ -108,6 +126,7 @@ git push origin master
 3. 打开设置页，选择 `LongCat` 或自定义兼容 OpenAI 的服务商进行测试
 4. 确认浏览器请求走的是同源 `/api/chat/completions`，而不是直接请求第三方域名
 5. 验证段落翻译、单词释义是否正常
+6. 验证人物高亮、点击人物后角色列表展开与定位是否正常
 
 ### 📊 部署状态监控
 
@@ -150,6 +169,31 @@ rm -rf build kotlin-js-store
 ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
 ```
 
+启动后通常可在以下地址访问：
+
+```text
+http://127.0.0.1:8080/
+```
+
+适合场景：
+
+- 日常 UI 调整
+- 交互联调
+- 阅读页效果验证
+- 在真正部署前先本地确认改动
+
+推荐流程：
+
+```bash
+# 1. 启动本地开发服务
+./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+
+# 2. 浏览器打开本地地址
+http://127.0.0.1:8080/
+
+# 3. 修改代码后直接刷新页面观察效果
+```
+
 ### 生产构建
 ```bash
 ./gradlew :composeApp:wasmJsBrowserDistribution
@@ -160,6 +204,7 @@ rm -rf build kotlin-js-store
 - UI 由 Compose Multiplatform `wasmJs` 渲染
 - 文件导入、ZIP 解压与浏览器存储通过 JS bridge 提供能力
 - 书架、阅读进度、翻译缓存等数据会持久化到浏览器本地存储
+- 建议优先使用本地开发模式做调试，确认无误后再执行部署流程
 
 ---
 

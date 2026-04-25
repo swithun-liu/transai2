@@ -36,6 +36,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -75,6 +76,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.transai.model.Paragraph
+import com.example.transai.viewmodel.BatchTranslationState
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 import com.example.transai.viewmodel.WordPopupState
@@ -96,6 +98,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var wordPopupOffset by remember { mutableStateOf<IntOffset?>(null) }
     var showCharactersDialog by remember { mutableStateOf(false) }
     var focusedCharacterName by remember { mutableStateOf<String?>(null) }
+    var showBatchTranslationDialog by remember { mutableStateOf(false) }
 
     rememberPopupOffset(
         anchor = wordPopupAnchor,
@@ -175,6 +178,15 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         }
                     },
                     actions = {
+                        TextButton(onClick = { showBatchTranslationDialog = true }) {
+                            Text(
+                                if (uiState.batchTranslation.isRunning && uiState.batchTranslation.totalCount > 0) {
+                                    "${uiState.batchTranslation.processedCount}/${uiState.batchTranslation.totalCount}"
+                                } else {
+                                    "进度"
+                                }
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 focusedCharacterName = null
@@ -210,6 +222,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                 paragraph = paragraph,
                                 personNotes = uiState.personNotes,
                                 onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) },
+                                onTranslateToHere = {
+                                    showBatchTranslationDialog = true
+                                    viewModel.onEvent(ReaderUiEvent.TranslateToParagraph(paragraph.id))
+                                },
                                 onWordTap = { word, localOffset ->
                                     wordPopupAnchor = WordPopupAnchor(paragraph.id, localOffset)
                                     viewModel.onEvent(
@@ -264,6 +280,13 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             onDismiss = { showCharactersDialog = false }
                         )
                     }
+
+                    if (showBatchTranslationDialog) {
+                        BatchTranslationDialog(
+                            state = uiState.batchTranslation,
+                            onDismiss = { showBatchTranslationDialog = false }
+                        )
+                    }
                 }
             }
         }
@@ -305,6 +328,7 @@ fun ParagraphItem(
     paragraph: Paragraph,
     personNotes: List<com.example.transai.model.PersonNote>,
     onToggle: () -> Unit,
+    onTranslateToHere: () -> Unit,
     onWordTap: (String, Offset) -> Unit,
     onCharacterTap: (com.example.transai.model.PersonNote) -> Unit,
     onCoordinatesChanged: (LayoutCoordinates?) -> Unit
@@ -379,6 +403,9 @@ fun ParagraphItem(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = Arrangement.End
         ) {
+            TextButton(onClick = onTranslateToHere) {
+                Text("翻译到此")
+            }
             TextButton(onClick = onToggle) {
                 Text(if (paragraph.isExpanded) "Hide" else "Translate")
             }
@@ -584,6 +611,67 @@ fun CharactersDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("关闭") }
+        }
+    )
+}
+
+@Composable
+fun BatchTranslationDialog(
+    state: BatchTranslationState,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("翻译进度") },
+        text = {
+            if (state.totalCount <= 0) {
+                Text(
+                    "暂无后台翻译任务",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val progress =
+                    if (state.totalCount == 0) 0f else state.processedCount.toFloat() / state.totalCount.toFloat()
+                Column {
+                    Text(
+                        if (state.isRunning) "后台翻译进行中，可关闭本窗口继续阅读" else "本轮翻译已结束"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = progress,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("目标范围：第 1 段 到 第 ${state.targetParagraphId + 1} 段")
+                    Text("整体进度：${state.processedCount}/${state.totalCount}")
+                    Text("缓存命中：${state.cachedCount}")
+                    Text("已发请求：${state.requestedCount}")
+                    Text("翻译成功：${state.successCount}")
+                    if (state.failedCount > 0) {
+                        Text(
+                            "翻译失败：${state.failedCount}",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (state.currentParagraphId != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("当前段落：第 ${state.currentParagraphId + 1} 段")
+                        if (!state.currentParagraphPreview.isNullOrBlank()) {
+                            Text(
+                                text = state.currentParagraphPreview,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
         }
     )
 }
