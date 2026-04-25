@@ -11,43 +11,45 @@ actual class ZipArchive actual constructor(private val filePath: String) {
     actual fun close() = Unit
 
     actual fun getEntry(name: String): ByteArray? {
-    val encoded = WebBridge.zipEntryBase64(filePath, name)
-    
-    // 更安全的类型检查
-    if (encoded == null) {
+    try {
+        val encoded = WebBridge.zipEntryBase64(filePath, name)
+        
+        // 简单的 null 检查
+        if (encoded == null) {
+            println("zipEntryBase64 returned null for: $name")
+            return null
+        }
+        
+        // 强制转换为字符串并解码
+        val encodedString = encoded.toString()
+        println("Decoding base64 for $name, string length: ${encodedString.length}")
+        
+        return Base64.decode(encodedString)
+    } catch (e: Exception) {
+        println("Error in getEntry for $name: $e")
         return null
     }
-    
-    try {
-        val encodedString = encoded as? String
-        if (encodedString != null) {
-            return Base64.decode(encodedString)
-        }
-    } catch (e: Exception) {
-        println("Error decoding base64 for $name: $e")
-    }
-    
-    return null
 }
 
 actual fun entryNames(): List<String> {
-    val namesJson = WebBridge.zipEntryNames(filePath)
-    
-    // 更安全的类型检查
-    if (namesJson == null) {
+    try {
+        val namesJson = WebBridge.zipEntryNames(filePath)
+        
+        // 简单的 null 检查
+        if (namesJson == null) {
+            println("zipEntryNames returned null")
+            return emptyList()
+        }
+        
+        // 强制转换为字符串并解析
+        val jsonString = namesJson.toString()
+        println("Parsing zip entry names, JSON length: ${jsonString.length}")
+        
+        return json.decodeFromString(jsonString)
+    } catch (e: Exception) {
+        println("Error in entryNames: $e")
         return emptyList()
     }
-    
-    try {
-        val jsonString = namesJson as? String
-        if (jsonString != null) {
-            return json.decodeFromString(jsonString)
-        }
-    } catch (e: Exception) {
-        println("Error parsing zip entry names: $e")
-    }
-    
-    return emptyList()
 }
 }
 
