@@ -1,9 +1,11 @@
 package com.example.transai.data
 
 import com.example.transai.domain.character.CharacterRecognitionPolicy
+import com.example.transai.model.CharacterConsolidation
 import com.example.transai.model.CharacterStoreDebugEntry
 import com.example.transai.model.CURRENT_CHARACTER_STRATEGY_VERSION
 import com.example.transai.model.CharacterRecognitionSettings
+import com.example.transai.model.CharacterRevealStage
 import com.example.transai.model.PersonMention
 import com.example.transai.model.PersonNote
 import com.example.transai.model.PersonResolution
@@ -86,6 +88,28 @@ object PersonNoteRepository {
             }
         }
         val rebuilt = rebuildNotes(currentNotes, settings)
+        saveStore(
+            bookPath = bookPath,
+            snapshot = CharacterStoreSnapshot(
+                strategyVersion = CURRENT_CHARACTER_STRATEGY_VERSION,
+                notes = rebuilt
+            )
+        )
+        return rebuilt
+    }
+
+    fun applyConsolidations(
+        bookPath: String,
+        consolidations: List<CharacterConsolidation>,
+        config: TranslationConfig
+    ): List<PersonNote> {
+        if (consolidations.isEmpty()) return getNotes(bookPath, config)
+        val settings = config.characterRecognitionSettings
+        val currentNotes = loadStore(bookPath, config = settings).notes
+        val rebuilt = rebuildNotes(
+            consolidateNotes(currentNotes, consolidations, settings),
+            settings
+        )
         saveStore(
             bookPath = bookPath,
             snapshot = CharacterStoreSnapshot(
@@ -235,7 +259,13 @@ private fun sanitizePersonNote(
         role = note.role.trim(),
         aliases = aliases,
         mentions = ensuredMentions,
-        paragraphId = paragraphId
+        paragraphId = paragraphId,
+        revealStage = inferRevealStage(
+            currentStage = note.revealStage,
+            canonicalName = canonicalName,
+            aliases = aliases,
+            mentions = ensuredMentions
+        )
     )
     return if (shouldKeepCharacter(sanitized, settings)) sanitized else sanitized.copy(aliases = emptyList())
 }
@@ -270,7 +300,13 @@ private fun finalizePersonNote(
         role = note.role.trim(),
         aliases = aliases,
         mentions = mentions,
-        paragraphId = paragraphId
+        paragraphId = paragraphId,
+        revealStage = inferRevealStage(
+            currentStage = note.revealStage,
+            canonicalName = canonicalName,
+            aliases = aliases,
+            mentions = mentions
+        )
     )
     return finalized
 }
@@ -357,7 +393,13 @@ private fun createPersonNote(
         role = resolution.role,
         aliases = aliases,
         mentions = listOf(mention),
-        paragraphId = mention.paragraphId
+        paragraphId = mention.paragraphId,
+        revealStage = inferRevealStage(
+            currentStage = CharacterRevealStage.CLUE,
+            canonicalName = bestName,
+            aliases = aliases,
+            mentions = listOf(mention)
+        )
     )
 }
 
@@ -388,8 +430,72 @@ private fun mergePersonNote(
         role = chooseBetterRole(existing.role, resolution.role),
         aliases = mergedAliases,
         mentions = mergedMentions,
-        paragraphId = mergedMentions.firstOrNull()?.paragraphId ?: existing.paragraphId
+        paragraphId = mergedMentions.firstOrNull()?.paragraphId ?: existing.paragraphId,
+        revealStage = inferRevealStage(
+            currentStage = existing.revealStage,
+            canonicalName = upgradedName,
+            aliases = mergedAliases,
+            mentions = mergedMentions
+        )
     )
+}
+
+private fun consolidateNotes(
+    currentNotes: List<PersonNote>,
+    consolidations: List<CharacterConsolidation>,
+    settings: CharacterRecognitionSettings
+): List<PersonNote> {
+    val notesById = currentNotes.associateBy { it.id }
+    val usedIds = mutableSetOf<String>()
+    val consolidatedNotes = mutableListOf<PersonNote>()
+
+    consolidations.forEach { consolidation ->
+        val sourceNotes = consolidation.sourceCharacterIds
+            .mapNotNull { notesById[it] }
+            .distinctBy { it.id }
+        if (sourceNotes.isEmpty()) return@forEach
+        usedIds += sourceNotes.map { it.id }
+
+        val mergedMentions = sourceNotes
+            .flatMap { it.mentions }
+            .distinctBy { "${it.paragraphId}_${normalizeCharacterToken(it.surfaceForm)}" }
+            .sortedBy { it.paragraphId }
+        val mergedAliases = (
+            sourceNotes.flatMap { it.aliases } +
+                sourceNotes.map { it.name } +
+                consolidation.aliases +
+                mergedMentions.map { it.surfaceForm }
+            )
+            .map { it.trim() }
+            .filter {
+                it.isNotBlank() &&
+                    !it.equals(consolidation.canonicalName, ignoreCase = true) &&
+                    CharacterRecognitionPolicy.shouldIncludeInCharacterList(it, settings)
+            }
+            .distinctBy { it.lowercase() }
+        val role = sourceNotes
+            .map { it.role }
+            .plus(consolidation.role)
+            .filter { it.isNotBlank() }
+            .maxByOrNull { it.length }
+            .orEmpty()
+        val paragraphId = mergedMentions.firstOrNull()?.paragraphId ?: sourceNotes.minOfOrNull { it.paragraphId } ?: -1
+        consolidatedNotes += PersonNote(
+            id = sourceNotes.first().id,
+            name = consolidation.canonicalName.trim(),
+            role = role,
+            aliases = mergedAliases,
+            mentions = mergedMentions,
+            paragraphId = paragraphId,
+            revealStage = consolidation.revealStage
+        )
+    }
+
+    currentNotes
+        .filterNot { it.id in usedIds }
+        .forEach { consolidatedNotes += it }
+
+    return consolidatedNotes
 }
 
 private fun deduplicateCharacters(
@@ -449,6 +555,42 @@ private fun shouldKeepCharacter(
     }
 }
 
+private fun inferRevealStage(
+    currentStage: CharacterRevealStage,
+    canonicalName: String,
+    aliases: List<String>,
+    mentions: List<PersonMention>
+): CharacterRevealStage {
+    if (currentStage == CharacterRevealStage.RESOLVED) return currentStage
+    val candidates = buildList {
+        add(canonicalName)
+        addAll(aliases)
+        addAll(mentions.map { it.surfaceForm })
+    }
+    return if (candidates.any(::looksLikeResolvedIdentity)) {
+        CharacterRevealStage.RESOLVED
+    } else {
+        CharacterRevealStage.CLUE
+    }
+}
+
+private fun looksLikeResolvedIdentity(text: String): Boolean {
+    val trimmed = text.trim()
+    if (trimmed.isBlank()) return false
+    if (trimmed.startsWith("the ", ignoreCase = true)) return false
+    if (trimmed.startsWith("a ", ignoreCase = true) || trimmed.startsWith("an ", ignoreCase = true)) return false
+    val normalized = normalizeCharacterToken(trimmed)
+    if (normalized in GENERIC_CHARACTER_TITLES) return false
+    val words = trimmed.split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (words.size >= 2) {
+        return words.count { token ->
+            val cleaned = token.trim(',', '.', ';', ':')
+            cleaned.firstOrNull()?.isUpperCase() == true || cleaned.lowercase() in COMMON_HONORIFICS
+        } >= 2
+    }
+    return trimmed.firstOrNull()?.isUpperCase() == true && trimmed.length >= 3
+}
+
 private fun chooseBetterDisplayName(current: String, candidate: String): String {
     val currentTrimmed = current.trim()
     val candidateTrimmed = candidate.trim()
@@ -505,6 +647,10 @@ private fun generatePersonId(name: String, paragraphId: Int): String {
 private val GENERIC_CHARACTER_TITLES = setOf(
     "he", "she", "him", "her", "man", "woman", "boy", "girl",
     "captain", "doctor", "professor", "teacher", "mother", "father"
+)
+
+private val COMMON_HONORIFICS = setOf(
+    "mr", "mr.", "mrs", "mrs.", "miss", "ms", "ms.", "sir", "lady", "lord"
 )
 
 @Serializable

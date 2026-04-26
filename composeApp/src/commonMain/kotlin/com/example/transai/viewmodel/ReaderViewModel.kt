@@ -11,7 +11,9 @@ import com.example.transai.domain.usecase.TranslateWordUseCase
 import com.example.transai.domain.usecase.UpdateSettingsUseCase
 import com.example.transai.domain.usecase.GetBookMetadataUseCase
 import com.example.transai.domain.usecase.UpdateBookProgressUseCase
+import com.example.transai.domain.usecase.ConsolidateCharacterNotesUseCase
 import com.example.transai.domain.usecase.ExtractPersonNotesUseCase
+import com.example.transai.domain.character.CharacterConsolidationTriggerPolicy
 import com.example.transai.data.TranslationRepository
 import com.example.transai.data.WordTranslationRepository
 import com.example.transai.model.Paragraph
@@ -40,6 +42,7 @@ class ReaderViewModel(
     private val translateParagraphUseCase: TranslateParagraphUseCase = TranslateParagraphUseCase(),
     private val translateWordUseCase: TranslateWordUseCase = TranslateWordUseCase(),
     private val extractPersonNotesUseCase: ExtractPersonNotesUseCase = ExtractPersonNotesUseCase(),
+    private val consolidateCharacterNotesUseCase: ConsolidateCharacterNotesUseCase = ConsolidateCharacterNotesUseCase(),
     private val parseBookUseCase: ParseBookUseCase = ParseBookUseCase(),
     private val getBookMetadataUseCase: GetBookMetadataUseCase = GetBookMetadataUseCase(),
     private val updateBookProgressUseCase: UpdateBookProgressUseCase = UpdateBookProgressUseCase()
@@ -395,18 +398,12 @@ class ReaderViewModel(
     private fun rebuildCharactersForCurrentBook(config: TranslationConfig) {
         val path = currentFilePath ?: return
         viewModelScope.launch(Dispatchers.Default) {
-            val rebuiltCharacters = PersonNoteRepository.rebuildForLatestStrategy(path, config)
-            val formattedJson = PersonNoteRepository.getFormattedStoreJson(path, config)
-            val debugEntries = PersonNoteRepository.getCharacterDebugEntries(path, config)
-            _uiState.update { state ->
-                state.copy(
-                    personNotes = rebuiltCharacters,
-                    characterStoreStrategyVersion = PersonNoteRepository.getStrategyVersion(path),
-                    characterStoreRawJson = PersonNoteRepository.getRawStoreJson(path),
-                    characterStoreFormattedJson = formattedJson,
-                    characterStoreEntries = debugEntries
-                )
+            var rebuiltCharacters = PersonNoteRepository.rebuildForLatestStrategy(path, config)
+            val consolidation = consolidateCharacterNotesUseCase(rebuiltCharacters, config).getOrNull().orEmpty()
+            if (consolidation.isNotEmpty()) {
+                rebuiltCharacters = PersonNoteRepository.applyConsolidations(path, consolidation, config)
             }
+            publishCharacterState(path, config, rebuiltCharacters)
         }
     }
 
@@ -614,24 +611,30 @@ class ReaderViewModel(
         val result = extractPersonNotesUseCase(text, currentCharacters, config)
         val resolutions = result.getOrNull().orEmpty()
         if (resolutions.isEmpty()) return
-        val mergedCharacters = PersonNoteRepository.applyResolutions(
+        var mergedCharacters = PersonNoteRepository.applyResolutions(
             bookPath = path,
             paragraphId = paragraphId,
             paragraphText = text,
             resolutions = resolutions,
             config = config
         )
-        val strategyVersion = PersonNoteRepository.getStrategyVersion(path)
-        val rawJson = PersonNoteRepository.getRawStoreJson(path)
-        val formattedJson = PersonNoteRepository.getFormattedStoreJson(path, config)
-        val debugEntries = PersonNoteRepository.getCharacterDebugEntries(path, config)
+        if (CharacterConsolidationTriggerPolicy.shouldTrigger(resolutions, mergedCharacters)) {
+            val consolidations = consolidateCharacterNotesUseCase(mergedCharacters, config).getOrNull().orEmpty()
+            if (consolidations.isNotEmpty()) {
+                mergedCharacters = PersonNoteRepository.applyConsolidations(path, consolidations, config)
+            }
+        }
+        publishCharacterState(path, config, mergedCharacters)
+    }
+
+    private fun publishCharacterState(path: String, config: TranslationConfig, personNotes: List<PersonNote>) {
         _uiState.update { state ->
             state.copy(
-                personNotes = mergedCharacters,
-                characterStoreStrategyVersion = strategyVersion,
-                characterStoreRawJson = rawJson,
-                characterStoreFormattedJson = formattedJson,
-                characterStoreEntries = debugEntries
+                personNotes = personNotes,
+                characterStoreStrategyVersion = PersonNoteRepository.getStrategyVersion(path),
+                characterStoreRawJson = PersonNoteRepository.getRawStoreJson(path),
+                characterStoreFormattedJson = PersonNoteRepository.getFormattedStoreJson(path, config),
+                characterStoreEntries = PersonNoteRepository.getCharacterDebugEntries(path, config)
             )
         }
     }

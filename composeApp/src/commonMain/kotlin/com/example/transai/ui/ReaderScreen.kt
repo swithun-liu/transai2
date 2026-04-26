@@ -679,6 +679,16 @@ fun CharactersDialog(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
+                                    note.revealStage.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (note.isClue) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.tertiary
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
                                     note.role,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1030,6 +1040,16 @@ private fun CharacterDetailContent(
             .padding(12.dp)
     ) {
         Text(character.name, style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            if (character.isClue) "当前状态：线索人物" else "当前状态：已整理人物",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (character.isClue) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            }
+        )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             character.role,

@@ -1,5 +1,8 @@
 package com.example.transai.data
 
+import com.example.transai.model.CharacterConsolidation
+import com.example.transai.model.CharacterRevealStage
+import com.example.transai.model.PersonMention
 import com.example.transai.model.PersonNote
 import com.example.transai.model.PersonResolution
 import com.example.transai.model.TranslationConfig
@@ -169,6 +172,7 @@ class TranslationService {
                         Rules:
                         - Prefer reusing an existing character when the mention is likely the same person.
                         - If a better full name appears later, keep matchedCharacterId and upgrade canonicalName.
+                        - If you are not confident, keep matchedCharacterId as null instead of forcing a merge.
                         - Do not invent characters that are not supported by the paragraph.
                         - If there are no people, return [].
                         """.trimIndent()
@@ -226,6 +230,130 @@ class TranslationService {
                 }
             }
             return Result.success(notes)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return Result.failure(e)
+        }
+    }
+
+    suspend fun consolidateCharacters(
+        existingCharacters: List<PersonNote>,
+        config: TranslationConfig
+    ): Result<List<CharacterConsolidation>> {
+        if (config.apiKey.isBlank()) {
+            return Result.failure(Exception("Please set API Key in settings."))
+        }
+        if (existingCharacters.size < 2) {
+            return Result.success(emptyList())
+        }
+        try {
+            val characterBoardJson = json.encodeToString(
+                ListSerializer(CharacterBoardPayload.serializer()),
+                existingCharacters.map { note ->
+                    CharacterBoardPayload(
+                        id = note.id,
+                        canonicalName = note.name,
+                        aliases = note.aliases,
+                        role = note.role,
+                        revealStage = note.revealStage.name,
+                        mentionSummaries = note.mentions
+                            .sortedBy { it.paragraphId }
+                            .take(4)
+                            .map { mention ->
+                                MentionSummaryPayload(
+                                    paragraphId = mention.paragraphId,
+                                    surfaceForm = mention.surfaceForm,
+                                    contextSnippet = mention.contextSnippet.take(120)
+                                )
+                            }
+                    )
+                }
+            )
+            val requestBody = ChatCompletionRequest(
+                model = config.model,
+                messages = listOf(
+                    Message(
+                        "system",
+                        """
+                        You reorganize a novel character board.
+                        The board may contain clue entries, duplicate entries, nicknames, titles, and later-discovered true names.
+                        Merge entries that refer to the same person.
+                        Prefer a real person name as canonicalName when the text supports it.
+                        Keep a descriptive clue entry only when the identity is still genuinely uncertain.
+                        Preserve the reading experience: clue entries may remain separate if evidence is insufficient.
+                        Return only a JSON array. Every item must contain:
+                        - sourceCharacterIds: ids of existing entries that should become this final entry
+                        - canonicalName: final display name
+                        - aliases: nicknames, titles, descriptive clue labels, and alternate names
+                        - role: concise Chinese summary
+                        - revealStage: either CLUE or RESOLVED
+                        Rules:
+                        - Every sourceCharacterId should appear in exactly one final item.
+                        - Merge clue entries into a resolved entry when later evidence makes the identity clear.
+                        - Do not drop useful aliases such as nicknames, titles, or clue labels.
+                        - Keep nameless but meaningful people as descriptive entries.
+                        """.trimIndent()
+                    ),
+                    Message(
+                        "user",
+                        """
+                        Current character board:
+                        $characterBoardJson
+                        """.trimIndent()
+                    )
+                )
+            )
+            val endpoint = resolveChatCompletionEndpoint(config)
+            val response: ChatCompletionResponse = client.post(endpoint) {
+                contentType(ContentType.Application.Json)
+                if (shouldUseAiProxy()) {
+                    setBody(
+                        ProxyChatCompletionRequest(
+                            baseUrl = config.baseUrl.trimEnd('/'),
+                            apiKey = config.apiKey,
+                            model = config.model,
+                            messages = requestBody.messages
+                        )
+                    )
+                } else {
+                    header("Authorization", "Bearer ${config.apiKey}")
+                    setBody(requestBody)
+                }
+            }.body()
+            val content = response.choices.firstOrNull()?.message?.content?.trim()
+            if (content.isNullOrBlank()) {
+                return Result.failure(Exception("Character consolidation failed: Empty response."))
+            }
+            val jsonText = extractJsonArray(content)
+            val payloads = json.decodeFromString(
+                ListSerializer(CharacterConsolidationPayload.serializer()),
+                jsonText
+            )
+            val consolidations = payloads.mapNotNull { payload ->
+                val canonicalName = payload.canonicalName.trim()
+                val role = payload.role.trim()
+                val sourceIds = payload.sourceCharacterIds
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                if (canonicalName.isBlank() || role.isBlank() || sourceIds.isEmpty()) {
+                    null
+                } else {
+                    CharacterConsolidation(
+                        sourceCharacterIds = sourceIds,
+                        canonicalName = canonicalName,
+                        aliases = payload.aliases
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinctBy { it.lowercase() },
+                        role = role,
+                        revealStage = payload.revealStage
+                            ?.let { raw -> runCatching { CharacterRevealStage.valueOf(raw.trim().uppercase()) }.getOrNull() }
+                            ?: CharacterRevealStage.RESOLVED
+                    )
+                }
+            }
+            return Result.success(consolidations)
         } catch (e: Exception) {
             e.printStackTrace()
             return Result.failure(e)
@@ -323,4 +451,30 @@ data class PersonResolutionPayload(
     val role: String,
     val surfaceForm: String,
     val confidence: Double? = null
+)
+
+@Serializable
+data class MentionSummaryPayload(
+    val paragraphId: Int,
+    val surfaceForm: String,
+    val contextSnippet: String
+)
+
+@Serializable
+data class CharacterBoardPayload(
+    val id: String,
+    val canonicalName: String,
+    val aliases: List<String>,
+    val role: String,
+    val revealStage: String,
+    val mentionSummaries: List<MentionSummaryPayload>
+)
+
+@Serializable
+data class CharacterConsolidationPayload(
+    val sourceCharacterIds: List<String>,
+    val canonicalName: String,
+    val aliases: List<String> = emptyList(),
+    val role: String,
+    val revealStage: String? = null
 )
