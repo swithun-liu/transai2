@@ -13,7 +13,7 @@ if [ "$VERCEL" = "1" ]; then
     # 检查是否有预构建文件
     if [ ! -d "dist" ]; then
         echo "❌ 错误：没有找到预构建的 dist 目录"
-        echo "💡 请在本地运行：./deploy-vercel.sh --build"
+        echo "💡 请在本地运行：./deploy-vercel.sh"
         exit 1
     fi
     

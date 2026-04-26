@@ -32,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -189,10 +190,17 @@ fun BookItem(
                 )
                 
                 if (book.totalParagraphs > 0) {
-                    val progress = (book.lastReadPosition.toFloat() / book.totalParagraphs * 100).toInt()
+                    val currentParagraph = (book.lastReadPosition + 1).coerceIn(1, book.totalParagraphs)
+                    val progressFraction = currentParagraph.toFloat() / book.totalParagraphs.toFloat()
+                    val progressPercent = (progressFraction * 100).toInt()
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = progressFraction,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Progress: $progress%",
+                        text = "已读 $currentParagraph/${book.totalParagraphs} · $progressPercent%",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary
                     )

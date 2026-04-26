@@ -162,6 +162,11 @@ class ReaderViewModel(
                         initialScrollIndex = initialIndex
                     )
                 }
+                updateBookProgressUseCase(
+                    resolvedPath,
+                    initialIndex.coerceIn(0, mappedParagraphs.lastIndex.coerceAtLeast(0)),
+                    mappedParagraphs.size
+                )
             } catch (e: Exception) {
                 println("ReaderViewModel: loadFile error=${e.message}")
                 _uiState.update { 

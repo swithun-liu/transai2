@@ -90,6 +90,8 @@
 说明：
 - `./deploy-vercel.sh` 会自动构建 Web 版本
 - 构建完成后会自动把最新产物同步到 `dist/`
+- 当前仓库以 `./deploy-vercel.sh` 作为唯一推荐发布入口
+- `vercel-build.sh` 已不再参与当前发布流程
 
 #### 第二步：提交代码到 GitHub
 ```bash
@@ -237,6 +239,13 @@ http://127.0.0.1:8080/
 
 # 4. 修改代码后直接刷新页面观察效果
 ```
+
+说明：
+
+- `./run-web-dev.sh` 现在默认以 `--continuous` 模式启动，会持续监听 Kotlin / Compose / 资源文件改动并自动重编译
+- `./run-web-dev.sh` 启动前会自动尝试释放 `8080` 端口上的旧 dev server，避免旧实例继续提供过期资源
+- 如果浏览器里还看到旧 UI，先确认终端里已经出现新的编译完成日志，再做一次硬刷新
+- 如果端口一直没释放，脚本会直接退出，这时可手动执行 `lsof -nP -iTCP:8080 -sTCP:LISTEN` 查 PID 后再 `kill <PID>`
 
 ### 生产构建
 ```bash

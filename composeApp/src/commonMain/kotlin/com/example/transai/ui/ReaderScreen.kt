@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +45,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,6 +113,25 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var focusedCharacterId by remember { mutableStateOf<String?>(null) }
     var highlightedParagraphId by remember { mutableStateOf<Int?>(null) }
     var showBatchTranslationDialog by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var searchQuery by remember(uiState.currentBookPath) { mutableStateOf("") }
+    val totalParagraphs = uiState.paragraphs.size
+    val currentParagraphIndex =
+        if (totalParagraphs == 0) 0 else listState.firstVisibleItemIndex.coerceIn(0, totalParagraphs - 1)
+    val progressFraction =
+        if (totalParagraphs == 0) 0f else ((currentParagraphIndex + 1).toFloat() / totalParagraphs.toFloat()).coerceIn(0f, 1f)
+    val progressPercent = (progressFraction * 100).toInt()
+    val currentChapter = uiState.chapters.lastOrNull { it.startIndex <= currentParagraphIndex }
+    val searchResults = remember(uiState.paragraphs, searchQuery) {
+        findParagraphMatches(uiState.paragraphs, searchQuery)
+    }
+    val jumpToParagraph: (Int) -> Unit = { paragraphId ->
+        viewModel.onEvent(ReaderUiEvent.RevealParagraph(paragraphId))
+        highlightedParagraphId = paragraphId
+        scope.launch {
+            listState.animateScrollToItem(paragraphId)
+        }
+    }
 
     rememberPopupOffset(
         anchor = wordPopupAnchor,
@@ -189,41 +210,86 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     ) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text("Reader") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        TextButton(onClick = { showBatchTranslationDialog = true }) {
-                            Text(
-                                if (uiState.batchTranslation.isRunning && uiState.batchTranslation.totalCount > 0) {
-                                    "${uiState.batchTranslation.processedCount}/${uiState.batchTranslation.totalCount}"
-                                } else {
-                                    "进度"
+                Column {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("Reader")
+                                if (totalParagraphs > 0) {
+                                    Text(
+                                        text = "第 ${currentParagraphIndex + 1}/$totalParagraphs 段 · $progressPercent%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showSearchDialog = true }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                            TextButton(onClick = { showBatchTranslationDialog = true }) {
+                                Text(
+                                    if (uiState.batchTranslation.isRunning && uiState.batchTranslation.totalCount > 0) {
+                                        "${uiState.batchTranslation.processedCount}/${uiState.batchTranslation.totalCount}"
+                                    } else {
+                                        "进度"
+                                    }
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    focusedCharacterId = null
+                                    showCharactersDialog = true
+                                }
+                            ) {
+                                Icon(Icons.Default.Person, contentDescription = "Characters")
+                            }
+                            TextButton(
+                                onClick = {
+                                    viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug)
+                                    showCharacterStoreDebugDialog = true
+                                }
+                            ) {
+                                Text("Debug")
+                            }
+                        }
+                    )
+                    if (totalParagraphs > 0) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            LinearProgressIndicator(
+                                progress = progressFraction,
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        }
-                        IconButton(
-                            onClick = {
-                                focusedCharacterId = null
-                                showCharactersDialog = true
-                            }
-                        ) {
-                            Icon(Icons.Default.Person, contentDescription = "Characters")
-                        }
-                        TextButton(
-                            onClick = {
-                                viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug)
-                                showCharacterStoreDebugDialog = true
-                            }
-                        ) {
-                            Text("Debug")
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "阅读进度：第 ${currentParagraphIndex + 1} 段 / 共 $totalParagraphs 段",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            currentChapter?.title
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { chapterTitle ->
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "当前章节：$chapterTitle",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                         }
                     }
-                )
+                }
             }
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -321,12 +387,21 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                 focusedCharacterId = uiState.personNotes.firstOrNull {
                                     it.mentionParagraphIds.contains(paragraphId)
                                 }?.id ?: focusedCharacterId
-                                viewModel.onEvent(ReaderUiEvent.RevealParagraph(paragraphId))
-                                highlightedParagraphId = paragraphId
-                                scope.launch {
-                                    listState.animateScrollToItem(paragraphId)
-                                }
+                                jumpToParagraph(paragraphId)
                                 showCharactersDialog = false
+                            }
+                        )
+                    }
+
+                    if (showSearchDialog) {
+                        ContentSearchDialog(
+                            query = searchQuery,
+                            results = searchResults,
+                            onQueryChange = { searchQuery = it },
+                            onDismiss = { showSearchDialog = false },
+                            onJumpToParagraph = { paragraphId ->
+                                jumpToParagraph(paragraphId)
+                                showSearchDialog = false
                             }
                         )
                     }
@@ -537,6 +612,12 @@ data class WordPopupAnchor(
     val localOffset: Offset
 )
 
+private data class SearchResultMatch(
+    val paragraphId: Int,
+    val snippet: String,
+    val sourceLabel: String
+)
+
 @Composable
 fun WordTranslationDialog(state: WordPopupState?, offset: IntOffset?, onDismiss: () -> Unit) {
     if (state == null || offset == null) return
@@ -590,6 +671,105 @@ fun WordTranslationDialog(state: WordPopupState?, offset: IntOffset?, onDismiss:
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ContentSearchDialog(
+    query: String,
+    results: List<SearchResultMatch>,
+    onQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onJumpToParagraph: (Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("内容搜索") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("输入关键词") }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                when {
+                    query.isBlank() -> {
+                        Text(
+                            "输入关键词后即可查看匹配段落，点击结果会直接跳转到对应位置。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    results.isEmpty() -> {
+                        Text(
+                            "未找到匹配内容",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    else -> {
+                        Text(
+                            "找到 ${results.size} 个匹配结果",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                            items(results, key = { it.paragraphId }) { result ->
+                                SearchResultRow(
+                                    result = result,
+                                    onClick = { onJumpToParagraph(result.paragraphId) }
+                                )
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SearchResultRow(
+    result: SearchResultMatch,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "第 ${result.paragraphId + 1} 段",
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                result.sourceLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            result.snippet,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1181,4 +1361,41 @@ private fun isBoundaryChar(char: Char?): Boolean {
 
 private fun normalizeCharacterName(name: String): String {
     return name.trim().lowercase()
+}
+
+private fun findParagraphMatches(paragraphs: List<Paragraph>, query: String): List<SearchResultMatch> {
+    val normalizedQuery = query.trim()
+    if (normalizedQuery.isBlank()) return emptyList()
+
+    return paragraphs.mapNotNull { paragraph ->
+        val originalIndex = paragraph.originalText.indexOf(normalizedQuery, ignoreCase = true)
+        if (originalIndex >= 0) {
+            return@mapNotNull SearchResultMatch(
+                paragraphId = paragraph.id,
+                snippet = buildSearchSnippet(paragraph.originalText, originalIndex, normalizedQuery.length),
+                sourceLabel = "原文"
+            )
+        }
+
+        val translatedText = paragraph.translatedText ?: return@mapNotNull null
+        val translatedIndex = translatedText.indexOf(normalizedQuery, ignoreCase = true)
+        if (translatedIndex >= 0) {
+            SearchResultMatch(
+                paragraphId = paragraph.id,
+                snippet = buildSearchSnippet(translatedText, translatedIndex, normalizedQuery.length),
+                sourceLabel = "译文"
+            )
+        } else {
+            null
+        }
+    }
+}
+
+private fun buildSearchSnippet(text: String, matchIndex: Int, queryLength: Int): String {
+    if (text.isBlank()) return ""
+    val start = (matchIndex - 24).coerceAtLeast(0)
+    val end = (matchIndex + queryLength + 36).coerceAtMost(text.length)
+    val prefix = if (start > 0) "..." else ""
+    val suffix = if (end < text.length) "..." else ""
+    return prefix + text.substring(start, end).replace('\n', ' ') + suffix
 }
