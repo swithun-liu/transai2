@@ -23,3 +23,5 @@ node_modules/
 .home/
 .npm-cache/
 .yarn-cache/
+.config/
+.cloudbase-home/

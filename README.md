@@ -28,12 +28,12 @@
 
 ## 🌐 Web 版本在线体验
 
-**生产环境**: https://transai2.vercel.app
+**生产环境**: 当前准备迁移到 EdgeOne Pages，线上域名待新的 EdgeOne 项目创建后补充
 
 ### Web AI 请求说明
 - Web 端 AI 请求不会直接从浏览器访问第三方模型接口
-- 所有 Web 端 `chat/completions` 请求统一走同源代理：`/api/chat/completions`
-- 该代理由当前 Vercel 项目提供，用于解决浏览器 `CORS` 问题
+- Web 端默认代理路径仍为 `/api/chat/completions`
+- 当前仓库已支持通过 `runtime-config.js` 注入新的代理地址，用于解决浏览器 `CORS` 问题
 - 因此 OpenAI、DeepSeek、Gemini、LongCat 以及兼容 OpenAI 的自定义中转服务，都可以通过 `Base URL + Model + API Key` 接入
 
 ### Web 阅读体验说明
@@ -45,7 +45,7 @@
 - 人物表会先展示线索人物，后续在证据足够时再自动或手动整理为更稳定的人物实体
 
 ### 快速开始
-1. 访问 https://transai2.vercel.app
+1. 访问新的 EdgeOne 线上地址
 2. 导入 EPUB 文件或使用内置示例书籍
 3. 在设置中配置 AI 模型和 API Key
 4. 开始阅读，点击翻译按钮体验 AI 辅助阅读
@@ -102,121 +102,106 @@
 
 ## 🌐 Web 版本部署
 
-项目使用 **GitHub + Vercel** 自动化部署。
+项目当前推荐使用 **EdgeOne Pages** 部署 Web 版本。原因：
+
+- 国内访问体验通常比 `Vercel` 更友好
+- 支持 `Pages Functions`
+- 你的 Web 端 AI 代理可以继续保持 `/api/chat/completions` 这条路径
 
 当前部署结构：
 - `dist/`：存放 Web 静态资源
-- `api/`：存放 Vercel Serverless Function
-- `vercel.json`：同时处理静态站点和 `/api/*` 代理路由
+- `functions/api/chat/completions.js`：EdgeOne Pages Function 版 AI 代理
+- `edgeone.json`：EdgeOne Pages 项目配置
+- `prepare-web-dist.sh`：本地构建并生成可部署的 `dist/`
+- `deploy-edgeone.sh`：本地准备 EdgeOne 部署产物
 
 ### 部署地址
 - **GitHub**: https://github.com/swithun-liu/transai2
-- **生产环境**: https://transai2.vercel.app
+- **生产环境**: 由你的 EdgeOne Pages 项目分配
 
-### 🚀 部署流程（3步完成）
+### 🚀 当前推荐流程
 
-#### 第一步：本地构建 WebAssembly 版本
+#### 第一步：本地重新构建并更新 `dist`
 ```bash
-# 使用部署脚本（推荐）
-./deploy-vercel.sh
-
-# 或者手动构建
-./gradlew :composeApp:wasmJsBrowserDistribution
+./prepare-web-dist.sh
 ```
 
 说明：
-- `./deploy-vercel.sh` 会自动构建 Web 版本
-- 构建完成后会自动把最新产物同步到 `dist/`
-- 当前仓库以 `./deploy-vercel.sh` 作为唯一推荐发布入口
-- `vercel-build.sh` 已不再参与当前发布流程
+- `./prepare-web-dist.sh` 会构建 Web 版本并同步到 `dist/`
+- 脚本会额外生成 `dist/runtime-config.js`
+- 默认线上代理地址仍写入为 `/api/chat/completions`
 
-#### 第二步：提交代码到 GitHub
+#### 第二步：准备 EdgeOne 部署文件
 ```bash
-git add .
-git commit -m "更新描述"
-git push origin master
+./deploy-edgeone.sh
 ```
 
-#### 第三步：Vercel 自动部署
-- **自动触发**: 代码推送到 GitHub 后，Vercel 自动开始部署
-- **部署时间**: 约 1-3 分钟
-- **访问地址**: https://transai2.vercel.app
+说明：
+- 该脚本会先调用 `./prepare-web-dist.sh`
+- 静态站点走 `dist/`
+- API 代理走 `functions/api/chat/completions.js`
+- `EdgeOne Pages` 会把该函数映射成 `/api/chat/completions`
 
-### 免费版使用建议
+#### 第三步：接入 EdgeOne Pages
 
-如果使用 Vercel Hobby 免费版，当前项目最需要关注的是：
+推荐方式：
 
-- **Git push 触发部署**: 重点看 `Deployments Created per Day = 100/day`
-- **CLI 直接部署**: 重点看 `Deployments Created from CLI per Week = 2000/week`
-- **并发构建**: `Concurrent Builds = 1`，连续推送时会排队
-- **单次构建时长**: `Build Time per Deployment = 45 minutes`
+1. 把当前仓库提交并推送到 GitHub
+2. 在 EdgeOne Pages 控制台导入该仓库
+3. 保持输出目录为 `dist`
+4. 保持 `edgeone.json` 生效
+5. 部署完成后访问 EdgeOne 提供的默认域名
 
-因此日常开发建议：
+### 🌐 运行时代理地址
 
-- 先在本地开发模式验证，再集中推送
-- 不要每个微小改动都立即触发线上部署
-- 构建失败时先看本地日志或 Vercel 日志，不要盲目重复 push
+Web 端支持运行时注入代理地址，优先级如下：
 
-### ✅ 实际发布时建议按下面执行
+1. `runtime-config.js` 中的 `window.TRANSAI_RUNTIME_CONFIG.aiProxyEndpoint`
+2. 本地开发环境默认 `http://127.0.0.1:8081/api/chat/completions`
+3. 线上默认 `/api/chat/completions`
 
-#### 命令
+如果后续你想临时把线上代理改成单独域名，可在构建前指定：
+
 ```bash
-# 1. 本地重新构建并更新 dist
-./deploy-vercel.sh
-
-# 2. 检查改动
-git status
-
-# 3. 提交代码
-git add .
-git commit -m "fix: add vercel proxy for web ai requests"
-
-# 4. 推送到远端
-git push origin master
+TRANSAI_WEB_AI_PROXY_URL=https://your-proxy-url \
+./prepare-web-dist.sh
 ```
 
-#### 操作
-1. 打开 Vercel 控制台确认新的部署任务已开始
-2. 等待部署完成后访问线上地址
+### 📊 部署后检查
+
+1. 打开 EdgeOne 默认域名确认页面可以访问
+2. 导入 EPUB，确认静态资源和 Wasm 文件加载正常
 3. 打开设置页，选择 `LongCat` 或自定义兼容 OpenAI 的服务商进行测试
-4. 确认浏览器请求走的是同源 `/api/chat/completions`，而不是直接请求第三方域名
+4. 确认浏览器请求命中 `/api/chat/completions`
 5. 验证段落翻译、单词释义是否正常
 6. 验证 `翻译到此` 是否只补齐未翻译段落，且请求为串行发送
 7. 验证顶部 `进度` 弹窗是否能显示后台翻译进度
 8. 验证人物高亮、点击人物后角色列表展开与定位是否正常
 9. 验证 EPUB 目录是否显示完整章节名，且正文不再混入目录页内容
 
-### 📊 部署状态监控
-
-1. **Vercel 控制台**: https://vercel.com/swithun-lius-projects/transai2
-2. **查看部署日志**: 实时监控构建过程
-3. **访问测试**: 部署完成后立即测试功能
-4. **网络检查**: 浏览器 DevTools 中确认 Web 请求命中 `/api/chat/completions`
-
 ### 🔧 特殊情况处理
 
-#### 网络依赖问题（如果出现）
+#### 重新清理并构建
 ```bash
-# 清理缓存重新构建
-rm -rf build kotlin-js-store
+rm -rf build kotlin-js-store dist
 ./gradlew clean
-./deploy-vercel.sh
+./prepare-web-dist.sh
 ```
 
-#### 部署失败处理
-- **自动回滚**: Vercel 会自动回滚到上一个可用版本
-- **错误日志**: 在 Vercel 控制台查看详细错误信息
-- **重新部署**: 修复问题后重新推送代码
+#### 旧的 Vercel 路线
+- `deploy-vercel.sh` 已废弃，仅保留为提示脚本
+- `api/chat/completions.js` 是旧的 Vercel 代理实现
+- 当前推荐使用 `functions/api/chat/completions.js`
 
 ### 🎯 部署验证清单
 
 **每次部署后检查：**
-- ✅ 网站可访问：https://transai2.vercel.app
+- ✅ 网站可访问
 - ✅ 界面正常显示
-- ✅ 基本功能正常（EPUB 导入、AI 翻译）
+- ✅ Wasm 资源可正常下载
+- ✅ 基本功能正常（EPUB 导入、阅读、AI 翻译）
 - ✅ Web 端不再直接请求第三方模型域名
-- ✅ `LongCat` / 自定义兼容 OpenAI 服务商无 CORS 报错
-- ✅ 无报错信息
+- ✅ 无明显报错信息
 
 ---
 

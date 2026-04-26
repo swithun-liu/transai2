@@ -1,0 +1,2 @@
+"use strict";(globalThis.webpackChunkcomposeApp=globalThis.webpackChunkcomposeApp||[]).push([[40],{40:(n,o,i)=>{function t(){return window.location.hostname}function p(){const n=window.TRANSAI_RUNTIME_CONFIG;return n&&"string"==typeof n.aiProxyEndpoint?n.aiProxyEndpoint:""}i.r(o),i.d(o,{configuredAiProxyEndpoint:()=>p,currentHostname:()=>t})}}]);
+//# sourceMappingURL=40.js.map
