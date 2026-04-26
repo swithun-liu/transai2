@@ -7,5 +7,6 @@ data class TranslationConfig(
     val apiKey: String = "",
     val baseUrl: String = "https://api.openai.com/v1",
     val model: String = "gpt-3.5-turbo",
-    val characterRecognitionSettings: CharacterRecognitionSettings = CharacterRecognitionSettings.default()
+    val characterRecognitionSettings: CharacterRecognitionSettings = CharacterRecognitionSettings.default(),
+    val characterConsolidationSettings: CharacterConsolidationSettings = CharacterConsolidationSettings.default()
 )

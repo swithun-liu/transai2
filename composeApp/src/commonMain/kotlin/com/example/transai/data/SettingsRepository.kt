@@ -1,6 +1,7 @@
 package com.example.transai.data
 
 import com.example.transai.model.CharacterRecognitionSettings
+import com.example.transai.model.CharacterConsolidationSettings
 import com.example.transai.model.TranslationConfig
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
@@ -26,11 +27,20 @@ object SettingsRepository {
                 }.getOrNull()
             }
             ?: CharacterRecognitionSettings.default()
+        val characterConsolidationSettings = settings
+            .getStringOrNull("character_consolidation_settings")
+            ?.let { raw ->
+                runCatching {
+                    json.decodeFromString<CharacterConsolidationSettings>(raw)
+                }.getOrNull()
+            }
+            ?: CharacterConsolidationSettings.default()
         return TranslationConfig(
             apiKey = settings.getString("api_key", ""),
             baseUrl = settings.getString("base_url", "https://api.openai.com/v1"),
             model = settings.getString("model_name", "gpt-3.5-turbo"),
-            characterRecognitionSettings = characterRecognitionSettings
+            characterRecognitionSettings = characterRecognitionSettings,
+            characterConsolidationSettings = characterConsolidationSettings
         )
     }
 
@@ -39,6 +49,7 @@ object SettingsRepository {
         settings["base_url"] = newConfig.baseUrl
         settings["model_name"] = newConfig.model
         settings["character_recognition_settings"] = json.encodeToString(newConfig.characterRecognitionSettings)
+        settings["character_consolidation_settings"] = json.encodeToString(newConfig.characterConsolidationSettings)
         _config.value = newConfig
     }
 

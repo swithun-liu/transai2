@@ -1,16 +1,20 @@
 package com.example.transai.domain.character
 
+import com.example.transai.model.CharacterConsolidationSettings
 import com.example.transai.model.PersonNote
 import com.example.transai.model.PersonResolution
 
 object CharacterConsolidationTriggerPolicy {
     fun shouldTrigger(
         recentResolutions: List<PersonResolution>,
-        currentNotes: List<PersonNote>
+        currentNotes: List<PersonNote>,
+        settings: CharacterConsolidationSettings
     ): Boolean {
+        if (!settings.enableAutomaticConsolidation) return false
         if (recentResolutions.isEmpty() || currentNotes.size < 2) return false
         return recentResolutions.any { resolution ->
-            hasStrongEvidence(resolution, currentNotes) || existsPossibleConflictInCurrentCharacters(resolution, currentNotes)
+            (settings.triggerOnStrongEvidence && hasStrongEvidence(resolution, currentNotes)) ||
+                (settings.triggerOnConflict && existsPossibleConflictInCurrentCharacters(resolution, currentNotes))
         }
     }
 

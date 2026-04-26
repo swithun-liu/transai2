@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.transai.model.CharacterMentionType
+import com.example.transai.model.CharacterConsolidationSettings
 import com.example.transai.model.CharacterRecognitionSettings
 import com.example.transai.model.ModelProvider
 import com.example.transai.model.TranslationConfig
@@ -53,6 +54,9 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var model by remember(config) { mutableStateOf(config.model) }
     var characterRecognitionSettings by remember(config) {
         mutableStateOf(config.characterRecognitionSettings)
+    }
+    var characterConsolidationSettings by remember(config) {
+        mutableStateOf(config.characterConsolidationSettings)
     }
     var isModelDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -174,11 +178,61 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        Text(
+            text = "人物整理触发",
+            style = MaterialTheme.typography.titleLarge
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "控制什么时候自动触发 AI 人物整理。手动“重整人物”不受这里影响。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        ConsolidationTriggerSettingRow(
+            title = "自动整理",
+            description = "关闭后，只保留线索人物和手动重整。",
+            checked = characterConsolidationSettings.enableAutomaticConsolidation,
+            onCheckedChange = { enabled ->
+                characterConsolidationSettings = characterConsolidationSettings.copy(
+                    enableAutomaticConsolidation = enabled
+                )
+            }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        ConsolidationTriggerSettingRow(
+            title = "强证据触发",
+            description = "出现全名、昵称加姓氏、头衔加姓名等更明确信息时自动整理。",
+            checked = characterConsolidationSettings.triggerOnStrongEvidence,
+            enabled = characterConsolidationSettings.enableAutomaticConsolidation,
+            onCheckedChange = { enabled ->
+                characterConsolidationSettings = characterConsolidationSettings.copy(
+                    triggerOnStrongEvidence = enabled
+                )
+            }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        ConsolidationTriggerSettingRow(
+            title = "冲突触发",
+            description = "人物表里出现明显疑似重复的线索人物时自动整理。",
+            checked = characterConsolidationSettings.triggerOnConflict,
+            enabled = characterConsolidationSettings.enableAutomaticConsolidation,
+            onCheckedChange = { enabled ->
+                characterConsolidationSettings = characterConsolidationSettings.copy(
+                    triggerOnConflict = enabled
+                )
+            }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         val updatedConfig = TranslationConfig(
             apiKey = apiKey,
             baseUrl = baseUrl,
             model = model,
-            characterRecognitionSettings = characterRecognitionSettings
+            characterRecognitionSettings = characterRecognitionSettings,
+            characterConsolidationSettings = characterConsolidationSettings
         )
 
         Button(
@@ -212,6 +266,44 @@ fun SettingsScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save, Rebuild Characters & Back")
+        }
+    }
+}
+
+@Composable
+private fun ConsolidationTriggerSettingRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onCheckedChange
+            )
         }
     }
 }

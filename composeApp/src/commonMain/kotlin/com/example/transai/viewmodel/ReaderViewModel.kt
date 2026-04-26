@@ -71,6 +71,7 @@ class ReaderViewModel(
             is ReaderUiEvent.TranslateToParagraph -> translateToParagraph(event.id)
             is ReaderUiEvent.RevealParagraph -> revealParagraph(event.id)
             ReaderUiEvent.RefreshCharacterStoreDebug -> refreshCharacterStoreDebug()
+            ReaderUiEvent.ConsolidateCharacters -> rebuildCharactersForCurrentBook(_uiState.value.config)
             is ReaderUiEvent.UpdateConfig -> updateConfig(event)
             is ReaderUiEvent.SaveProgress -> saveProgress(event.index)
             is ReaderUiEvent.SelectWord -> selectWord(event)
@@ -618,7 +619,12 @@ class ReaderViewModel(
             resolutions = resolutions,
             config = config
         )
-        if (CharacterConsolidationTriggerPolicy.shouldTrigger(resolutions, mergedCharacters)) {
+        if (CharacterConsolidationTriggerPolicy.shouldTrigger(
+                recentResolutions = resolutions,
+                currentNotes = mergedCharacters,
+                settings = config.characterConsolidationSettings
+            )
+        ) {
             val consolidations = consolidateCharacterNotesUseCase(mergedCharacters, config).getOrNull().orEmpty()
             if (consolidations.isNotEmpty()) {
                 mergedCharacters = PersonNoteRepository.applyConsolidations(path, consolidations, config)

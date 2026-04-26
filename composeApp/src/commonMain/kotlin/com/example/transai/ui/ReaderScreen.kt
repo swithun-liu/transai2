@@ -309,6 +309,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             focusedCharacterId = focusedCharacterId,
                             onDismiss = { showCharactersDialog = false },
                             onSelectCharacter = { focusedCharacterId = it.id },
+                            onManualConsolidate = {
+                                focusedCharacterId = null
+                                viewModel.onEvent(ReaderUiEvent.ConsolidateCharacters)
+                            },
                             onOpenDebug = {
                                 viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug)
                                 showCharacterStoreDebugDialog = true
@@ -617,18 +621,24 @@ fun CharactersDialog(
     focusedCharacterId: String?,
     onDismiss: () -> Unit,
     onSelectCharacter: (PersonNote) -> Unit,
+    onManualConsolidate: () -> Unit,
     onOpenDebug: () -> Unit,
     onJumpToParagraph: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
-    val selectedCharacter = remember(personNotes, focusedCharacterId) {
+    val personNotesVersion = remember(personNotes) {
+        personNotes.joinToString("|") { note ->
+            "${note.id}:${note.name}:${note.revealStage.name}:${note.mentionCount}"
+        }
+    }
+    val selectedCharacter = remember(personNotesVersion, focusedCharacterId) {
         personNotes.firstOrNull { it.id == focusedCharacterId } ?: personNotes.firstOrNull()
     }
-    val focusedIndex = remember(personNotes, selectedCharacter?.id) {
+    val focusedIndex = remember(personNotesVersion, selectedCharacter?.id) {
         val selectedId = selectedCharacter?.id ?: return@remember -1
         personNotes.indexOfFirst { it.id == selectedId }
     }
-    LaunchedEffect(focusedIndex) {
+    LaunchedEffect(personNotesVersion, focusedIndex) {
         if (focusedIndex >= 0) {
             listState.scrollToItem(focusedIndex)
         }
@@ -709,8 +719,11 @@ fun CharactersDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    TextButton(onClick = onManualConsolidate) {
+                        Text("整理人物")
+                    }
                     TextButton(onClick = onOpenDebug) {
                         Text("Debug JSON")
                     }

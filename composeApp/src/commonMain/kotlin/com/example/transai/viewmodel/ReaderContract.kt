@@ -55,6 +55,7 @@ sealed interface ReaderUiEvent {
     data class TranslateToParagraph(val id: Int) : ReaderUiEvent
     data class RevealParagraph(val id: Int) : ReaderUiEvent
     data object RefreshCharacterStoreDebug : ReaderUiEvent
+    data object ConsolidateCharacters : ReaderUiEvent
     data class UpdateConfig(
         val config: TranslationConfig,
         val rebuildCharacters: Boolean = false
