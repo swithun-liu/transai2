@@ -1,6 +1,5 @@
 package com.example.transai
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.transai.ui.BookshelfScreen
 import com.example.transai.ui.ReaderScreen
 import com.example.transai.ui.SettingsScreen
+import com.example.transai.ui.TransAiTheme
 import com.example.transai.viewmodel.BookshelfViewModel
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
@@ -22,12 +22,10 @@ sealed class Screen {
 
 @Composable
 fun App() {
-    MaterialTheme(
-        typography = appTypography()
-    ) {
+    TransAiTheme {
         val readerViewModel = viewModel { ReaderViewModel() }
         val bookshelfViewModel = viewModel { BookshelfViewModel() }
-        
+
         var currentScreen by remember { mutableStateOf<Screen>(Screen.Bookshelf) }
 
         when (val screen = currentScreen) {

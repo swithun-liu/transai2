@@ -6,10 +6,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +22,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -81,6 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.example.transai.appFonts
 import com.example.transai.model.Paragraph
 import com.example.transai.model.CharacterStoreDebugEntry
 import com.example.transai.model.CharacterRecognitionSettings
@@ -100,6 +105,7 @@ import androidx.compose.ui.unit.IntOffset
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
+    val fonts = appFonts()
     val uiState by viewModel.uiState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -122,6 +128,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         if (totalParagraphs == 0) 0f else ((currentParagraphIndex + 1).toFloat() / totalParagraphs.toFloat()).coerceIn(0f, 1f)
     val progressPercent = (progressFraction * 100).toInt()
     val currentChapter = uiState.chapters.lastOrNull { it.startIndex <= currentParagraphIndex }
+    val currentBookTitle = remember(uiState.currentBookPath) {
+        uiState.currentBookPath
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.substringBeforeLast(".epub")
+            ?.takeIf { it.isNotBlank() }
+            ?: "Reader"
+    }
     val searchResults = remember(uiState.paragraphs, searchQuery) {
         findParagraphMatches(uiState.paragraphs, searchQuery)
     }
@@ -208,13 +222,26 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             }
         }
     ) {
-        Scaffold(
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 Column {
                     TopAppBar(
+                        modifier = Modifier.background(MaterialTheme.colorScheme.background),
                         title = {
                             Column {
-                                Text("Reader")
+                                Text(
+                                    text = currentBookTitle,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontFamily = fonts.ui
+                                    )
+                                )
                                 if (totalParagraphs > 0) {
                                     Text(
                                         text = "第 ${currentParagraphIndex + 1}/$totalParagraphs 段 · $progressPercent%",
@@ -261,30 +288,37 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         }
                     )
                     if (totalParagraphs > 0) {
-                        Column(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LinearProgressIndicator(
-                                progress = progressFraction,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "阅读进度：第 ${currentParagraphIndex + 1} 段 / 共 $totalParagraphs 段",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "阅读进度：第 ${currentParagraphIndex + 1} 段 / 共 $totalParagraphs 段",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                LinearProgressIndicator(
+                                    progress = progressFraction,
+                                    modifier = Modifier.widthIn(min = 96.dp, max = 240.dp)
+                                )
+                            }
                             currentChapter?.title
                                 ?.takeIf { it.isNotBlank() }
                                 ?.let { chapterTitle ->
-                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "当前章节：$chapterTitle",
+                                        text = chapterTitle,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1
                                     )
                                 }
                         }
@@ -304,8 +338,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-                        contentPadding = PaddingValues(16.dp)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .widthIn(max = 1280.dp)
+                            .align(Alignment.TopCenter),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         items(
                             items = uiState.paragraphs,
@@ -343,19 +381,45 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                     }
                                 }
                             )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                            )
                         }
                     }
 
-                    // FAB to open drawer
                     FloatingActionButton(
                         onClick = { scope.launch { drawerState.open() } },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+
+                    if (uiState.batchTranslation.isRunning && uiState.batchTranslation.totalCount > 0) {
+                        GlassCard(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "后台翻译进行中",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                LinearProgressIndicator(
+                                    progress = if (uiState.batchTranslation.totalCount == 0) {
+                                        0f
+                                    } else {
+                                        uiState.batchTranslation.processedCount.toFloat() /
+                                            uiState.batchTranslation.totalCount.toFloat()
+                                    },
+                                    modifier = Modifier.width(140.dp)
+                                )
+                            }
+                        }
                     }
 
                     WordTranslationDialog(
@@ -427,6 +491,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         }
     }
 }
+}
+
 
 @Composable
 private fun rememberPopupOffset(
@@ -458,6 +524,7 @@ private fun rememberPopupOffset(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ParagraphItem(
     paragraph: Paragraph,
@@ -470,6 +537,9 @@ fun ParagraphItem(
     isHighlighted: Boolean,
     onCoordinatesChanged: (LayoutCoordinates?) -> Unit
 ) {
+    val fonts = appFonts()
+    val readingFont = fonts.reading
+    val cjkFont = fonts.cjk
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val annotatedText = remember(paragraph.originalText, personNotes, characterRecognitionSettings) {
         buildHighlightedParagraphText(paragraph.originalText, personNotes, characterRecognitionSettings)
@@ -482,78 +552,92 @@ fun ParagraphItem(
             .fillMaxWidth()
             .background(
                 color = if (isHighlighted) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)
                 } else {
-                    MaterialTheme.colorScheme.surface
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.42f)
                 },
-                shape = MaterialTheme.shapes.medium
+                shape = MaterialTheme.shapes.small
             )
-            .padding(4.dp)
+            .border(
+                width = 1.dp,
+                color = if (isHighlighted) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                },
+                shape = MaterialTheme.shapes.small
+            )
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            SelectionContainer(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = annotatedText,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        lineHeight = 24.sp,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    modifier = Modifier
-                        .pointerInput(annotatedText) {
-                            detectTapGestures { position ->
-                                val result = layoutResult ?: return@detectTapGestures
-                                val offset = result.getOffsetForPosition(position)
-                                val characterNote = annotatedText
-                                    .getStringAnnotations(
-                                        tag = CHARACTER_ANNOTATION_TAG,
-                                        start = offset,
-                                        end = (offset + 1).coerceAtMost(annotatedText.length)
-                                    )
-                                    .firstOrNull()
-                                    ?.let { annotation ->
-                                        personNotes.firstOrNull {
-                                            it.id == annotation.item
-                                        }
-                                    }
-                                if (characterNote != null) {
-                                    onCharacterTap(characterNote)
-                                    return@detectTapGestures
-                                }
-                                val word = findWordAt(paragraph.originalText, offset)
-                                if (word != null) {
-                                    onWordTap(word, position)
-                                }
-                            }
-                        }
-                    .onGloballyPositioned { onCoordinatesChanged(it) },
-                    onTextLayout = { layoutResult = it }
-                )
-            }
-            
-            // Show icon if translation is cached but not expanded
-            if (paragraph.translatedText != null && !paragraph.isExpanded) {
-                Icon(
-                    imageVector = Icons.Default.Translate,
-                    contentDescription = "Cached translation available",
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .padding(start = 8.dp, top = 4.dp)
-                        .width(16.dp)
-                        .height(16.dp)
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "第 ${paragraph.id + 1} 段",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (paragraph.translatedText != null && !paragraph.isExpanded) {
+                    Text(
+                        text = "已缓存",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                TextButton(onClick = onTranslateToHere) {
+                    Text("翻译到此")
+                }
+                TextButton(onClick = onToggle) {
+                    Text(if (paragraph.isExpanded) "收起" else "翻译")
+                }
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onTranslateToHere) {
-                Text("翻译到此")
-            }
-            TextButton(onClick = onToggle) {
-                Text(if (paragraph.isExpanded) "Hide" else "Translate")
-            }
+        Spacer(modifier = Modifier.height(6.dp))
+        SelectionContainer(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = annotatedText,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = readingFont,
+                    lineHeight = 31.sp,
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier
+                    .pointerInput(annotatedText) {
+                        detectTapGestures { position ->
+                            val result = layoutResult ?: return@detectTapGestures
+                            val offset = result.getOffsetForPosition(position)
+                            val characterNote = annotatedText
+                                .getStringAnnotations(
+                                    tag = CHARACTER_ANNOTATION_TAG,
+                                    start = offset,
+                                    end = (offset + 1).coerceAtMost(annotatedText.length)
+                                )
+                                .firstOrNull()
+                                ?.let { annotation ->
+                                    personNotes.firstOrNull {
+                                        it.id == annotation.item
+                                    }
+                                }
+                            if (characterNote != null) {
+                                onCharacterTap(characterNote)
+                                return@detectTapGestures
+                            }
+                            val word = findWordAt(paragraph.originalText, offset)
+                            if (word != null) {
+                                onWordTap(word, position)
+                            }
+                        }
+                    }
+                    .onGloballyPositioned { onCoordinatesChanged(it) },
+                onTextLayout = { layoutResult = it }
+            )
         }
 
         AnimatedVisibility(
@@ -566,7 +650,7 @@ fun ParagraphItem(
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
                         shape = MaterialTheme.shapes.small
                     )
                     .padding(12.dp)
@@ -582,8 +666,8 @@ fun ParagraphItem(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Translating...",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "翻译中...",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = cjkFont),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -591,13 +675,15 @@ fun ParagraphItem(
                     Text(
                         text = paragraph.error,
                         style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = cjkFont,
                             color = MaterialTheme.colorScheme.error
                         )
                     )
                 } else {
                     Text(
-                        text = paragraph.translatedText ?: "Translation not available",
+                        text = paragraph.translatedText ?: "暂无译文",
                         style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = cjkFont,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
@@ -630,11 +716,16 @@ fun WordTranslationDialog(state: WordPopupState?, offset: IntOffset?, onDismiss:
         Column(
             modifier = Modifier
                 .width(220.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surface,
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
                     shape = MaterialTheme.shapes.medium
                 )
-                .padding(12.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.readerCardBackground(),
+                    shape = MaterialTheme.shapes.medium
+                )
+                .padding(14.dp)
         ) {
             Text(
                 text = state.word,
