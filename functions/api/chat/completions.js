@@ -30,14 +30,7 @@ function normalizeBaseUrl(baseUrl) {
   return normalized;
 }
 
-export function onRequestOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: JSON_HEADERS
-  });
-}
-
-export async function onRequestPost(context) {
+async function handlePost(context) {
   try {
     const { request } = context;
     const { baseUrl, apiKey, model, messages } = await request.json();
@@ -86,6 +79,19 @@ export async function onRequestPost(context) {
   }
 }
 
-export function onRequest() {
+export async function onRequest(context) {
+  const method = context.request.method.toUpperCase();
+
+  if (method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: JSON_HEADERS
+    });
+  }
+
+  if (method === 'POST') {
+    return handlePost(context);
+  }
+
   return jsonResponse(405, { error: 'Method Not Allowed' }, { Allow: 'POST, OPTIONS' });
 }
