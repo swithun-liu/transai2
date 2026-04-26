@@ -66,6 +66,8 @@ class ReaderViewModel(
             ReaderUiEvent.LoadSample -> loadSampleContent()
             is ReaderUiEvent.ToggleTranslation -> toggleTranslation(event.id)
             is ReaderUiEvent.TranslateToParagraph -> translateToParagraph(event.id)
+            is ReaderUiEvent.RevealParagraph -> revealParagraph(event.id)
+            ReaderUiEvent.RefreshCharacterStoreDebug -> refreshCharacterStoreDebug()
             is ReaderUiEvent.UpdateConfig -> updateConfig(event)
             is ReaderUiEvent.SaveProgress -> saveProgress(event.index)
             is ReaderUiEvent.SelectWord -> selectWord(event)
@@ -96,6 +98,11 @@ class ReaderViewModel(
                     paragraphs = emptyList(),
                     chapters = emptyList(),
                     personNotes = emptyList(),
+                    currentBookPath = null,
+                    characterStoreStrategyVersion = 0,
+                    characterStoreRawJson = "{}",
+                    characterStoreFormattedJson = "{}",
+                    characterStoreEntries = emptyList(),
                     initialScrollIndex = 0,
                     batchTranslation = BatchTranslationState()
                 ) 
@@ -130,13 +137,23 @@ class ReaderViewModel(
                         isExpanded = translationState?.isExpanded == true
                     )
                 }
-                val notes = PersonNoteRepository.getNotes(path)
+                val currentConfig = _uiState.value.config
+                val notes = PersonNoteRepository.getNotes(path, currentConfig)
+                val strategyVersion = PersonNoteRepository.getStrategyVersion(path)
+                val rawJson = PersonNoteRepository.getRawStoreJson(path)
+                val formattedJson = PersonNoteRepository.getFormattedStoreJson(path, currentConfig)
+                val debugEntries = PersonNoteRepository.getCharacterDebugEntries(path, currentConfig)
                 
                 _uiState.update { 
                     it.copy(
                         paragraphs = mappedParagraphs,
                         chapters = chaptersInfo,
                         personNotes = notes,
+                        currentBookPath = resolvedPath,
+                        characterStoreStrategyVersion = strategyVersion,
+                        characterStoreRawJson = rawJson,
+                        characterStoreFormattedJson = formattedJson,
+                        characterStoreEntries = debugEntries,
                         isLoading = false,
                         initialScrollIndex = initialIndex
                     )
@@ -146,6 +163,7 @@ class ReaderViewModel(
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
+                        currentBookPath = null,
                         error = "Error loading book: ${e.message}"
                     )
                 }
@@ -254,6 +272,29 @@ class ReaderViewModel(
         }
     }
 
+    private fun revealParagraph(id: Int) {
+        val path = currentFilePath ?: return
+        val paragraph = _uiState.value.paragraphs.firstOrNull { it.id == id } ?: return
+        if (paragraph.translatedText != null && !paragraph.isExpanded) {
+            updateParagraphExpansion(id, true)
+            viewModelScope.launch(Dispatchers.Default) {
+                TranslationRepository.updateExpansionState(path, id, true)
+            }
+        }
+    }
+
+    private fun refreshCharacterStoreDebug() {
+        val path = currentFilePath ?: return
+        _uiState.update { state ->
+            state.copy(
+                characterStoreStrategyVersion = PersonNoteRepository.getStrategyVersion(path),
+                characterStoreRawJson = PersonNoteRepository.getRawStoreJson(path),
+                characterStoreFormattedJson = PersonNoteRepository.getFormattedStoreJson(path, state.config),
+                characterStoreEntries = PersonNoteRepository.getCharacterDebugEntries(path, state.config)
+            )
+        }
+    }
+
     private suspend fun processBatchTranslationQueue(path: String) {
         while (true) {
             val targetId = batchTargetParagraphId
@@ -345,6 +386,28 @@ class ReaderViewModel(
 
     private fun updateConfig(event: ReaderUiEvent.UpdateConfig) {
         updateSettingsUseCase(event.config)
+        _uiState.update { it.copy(config = event.config) }
+        if (event.rebuildCharacters) {
+            rebuildCharactersForCurrentBook(event.config)
+        }
+    }
+
+    private fun rebuildCharactersForCurrentBook(config: TranslationConfig) {
+        val path = currentFilePath ?: return
+        viewModelScope.launch(Dispatchers.Default) {
+            val rebuiltCharacters = PersonNoteRepository.rebuildForLatestStrategy(path, config)
+            val formattedJson = PersonNoteRepository.getFormattedStoreJson(path, config)
+            val debugEntries = PersonNoteRepository.getCharacterDebugEntries(path, config)
+            _uiState.update { state ->
+                state.copy(
+                    personNotes = rebuiltCharacters,
+                    characterStoreStrategyVersion = PersonNoteRepository.getStrategyVersion(path),
+                    characterStoreRawJson = PersonNoteRepository.getRawStoreJson(path),
+                    characterStoreFormattedJson = formattedJson,
+                    characterStoreEntries = debugEntries
+                )
+            }
+        }
     }
 
     private fun saveProgress(index: Int) {
@@ -547,36 +610,30 @@ class ReaderViewModel(
     }
 
     private suspend fun extractAndSavePersonNotes(path: String, paragraphId: Int, text: String, config: TranslationConfig) {
-        val result = extractPersonNotesUseCase(text, config)
-        val extracted = result.getOrNull().orEmpty()
-        if (extracted.isEmpty()) return
-        val added = mutableListOf<PersonNote>()
-        extracted.forEach { note ->
-            val normalized = normalizeName(note.name)
-            if (normalized.isBlank()) return@forEach
-            val inserted = PersonNoteRepository.insertIfAbsent(
-                bookPath = path,
-                nameKey = normalized,
-                displayName = note.name.trim(),
-                role = note.role.trim(),
-                paragraphId = paragraphId
+        val currentCharacters = _uiState.value.personNotes
+        val result = extractPersonNotesUseCase(text, currentCharacters, config)
+        val resolutions = result.getOrNull().orEmpty()
+        if (resolutions.isEmpty()) return
+        val mergedCharacters = PersonNoteRepository.applyResolutions(
+            bookPath = path,
+            paragraphId = paragraphId,
+            paragraphText = text,
+            resolutions = resolutions,
+            config = config
+        )
+        val strategyVersion = PersonNoteRepository.getStrategyVersion(path)
+        val rawJson = PersonNoteRepository.getRawStoreJson(path)
+        val formattedJson = PersonNoteRepository.getFormattedStoreJson(path, config)
+        val debugEntries = PersonNoteRepository.getCharacterDebugEntries(path, config)
+        _uiState.update { state ->
+            state.copy(
+                personNotes = mergedCharacters,
+                characterStoreStrategyVersion = strategyVersion,
+                characterStoreRawJson = rawJson,
+                characterStoreFormattedJson = formattedJson,
+                characterStoreEntries = debugEntries
             )
-            if (inserted) {
-                added.add(note.copy(paragraphId = paragraphId))
-            }
         }
-        if (added.isNotEmpty()) {
-            _uiState.update { state ->
-                val merged = (state.personNotes + added)
-                    .distinctBy { it.name.lowercase() }
-                    .sortedBy { it.name.lowercase() }
-                state.copy(personNotes = merged)
-            }
-        }
-    }
-
-    private fun normalizeName(name: String): String {
-        return name.trim().lowercase()
     }
 
     fun getApiKeyForProvider(provider: String): String {

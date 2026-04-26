@@ -180,6 +180,10 @@ rm -rf build kotlin-js-store
 
 ### Web 开发模式
 ```bash
+# 推荐：在当前仓库内使用隔离的 Gradle/Kotlin/npm/yarn 缓存，避免系统目录权限导致 Wasm dev server 起不来
+./run-web-dev.sh
+
+# 兼容原始命令
 ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
 ```
 
@@ -218,7 +222,7 @@ http://127.0.0.1:8081/api/chat/completions
 
 ```bash
 # 1. 启动本地开发服务
-./gradlew :composeApp:wasmJsBrowserDevelopmentRun
+./run-web-dev.sh
 
 # 2. 启动本地 AI 代理
 node local-ai-proxy.mjs

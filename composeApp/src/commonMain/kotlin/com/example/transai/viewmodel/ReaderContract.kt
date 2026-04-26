@@ -1,6 +1,7 @@
 package com.example.transai.viewmodel
 
 import com.example.transai.model.Paragraph
+import com.example.transai.model.CharacterStoreDebugEntry
 import com.example.transai.model.PersonNote
 import com.example.transai.model.TranslationConfig
 
@@ -13,6 +14,11 @@ data class ReaderUiState(
     val paragraphs: List<Paragraph> = emptyList(),
     val chapters: List<ChapterInfo> = emptyList(),
     val personNotes: List<PersonNote> = emptyList(),
+    val currentBookPath: String? = null,
+    val characterStoreStrategyVersion: Int = 0,
+    val characterStoreRawJson: String = "{}",
+    val characterStoreFormattedJson: String = "{}",
+    val characterStoreEntries: List<CharacterStoreDebugEntry> = emptyList(),
     val config: TranslationConfig = TranslationConfig(),
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -47,7 +53,12 @@ sealed interface ReaderUiEvent {
     data object LoadSample : ReaderUiEvent
     data class ToggleTranslation(val id: Int) : ReaderUiEvent
     data class TranslateToParagraph(val id: Int) : ReaderUiEvent
-    data class UpdateConfig(val config: TranslationConfig) : ReaderUiEvent
+    data class RevealParagraph(val id: Int) : ReaderUiEvent
+    data object RefreshCharacterStoreDebug : ReaderUiEvent
+    data class UpdateConfig(
+        val config: TranslationConfig,
+        val rebuildCharacters: Boolean = false
+    ) : ReaderUiEvent
     data class SaveProgress(val index: Int) : ReaderUiEvent
     data class SelectWord(val paragraphId: Int, val word: String, val context: String) : ReaderUiEvent
     data object DismissWordPopup : ReaderUiEvent

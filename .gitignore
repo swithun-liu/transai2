@@ -18,3 +18,8 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+.gradle-home/
+.kotlin-home/
+.home/
+.npm-cache/
+.yarn-cache/

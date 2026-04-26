@@ -6,10 +6,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +48,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -65,6 +68,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -76,10 +80,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.transai.model.Paragraph
+import com.example.transai.model.CharacterStoreDebugEntry
+import com.example.transai.model.CharacterRecognitionSettings
+import com.example.transai.model.PersonMention
+import com.example.transai.model.PersonNote
 import com.example.transai.viewmodel.BatchTranslationState
+import com.example.transai.viewmodel.ChapterInfo
 import com.example.transai.viewmodel.ReaderUiEvent
 import com.example.transai.viewmodel.ReaderViewModel
 import com.example.transai.viewmodel.WordPopupState
+import com.example.transai.domain.character.CharacterRecognitionPolicy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -97,7 +107,9 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var wordPopupAnchor by remember { mutableStateOf<WordPopupAnchor?>(null) }
     var wordPopupOffset by remember { mutableStateOf<IntOffset?>(null) }
     var showCharactersDialog by remember { mutableStateOf(false) }
-    var focusedCharacterName by remember { mutableStateOf<String?>(null) }
+    var showCharacterStoreDebugDialog by remember { mutableStateOf(false) }
+    var focusedCharacterId by remember { mutableStateOf<String?>(null) }
+    var highlightedParagraphId by remember { mutableStateOf<Int?>(null) }
     var showBatchTranslationDialog by remember { mutableStateOf(false) }
 
     rememberPopupOffset(
@@ -120,6 +132,13 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         if (uiState.paragraphs.isNotEmpty()) {
             delay(500)
             viewModel.onEvent(ReaderUiEvent.SaveProgress(firstVisibleIndex))
+        }
+    }
+
+    LaunchedEffect(highlightedParagraphId) {
+        if (highlightedParagraphId != null) {
+            delay(2500)
+            highlightedParagraphId = null
         }
     }
 
@@ -189,11 +208,19 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                         }
                         IconButton(
                             onClick = {
-                                focusedCharacterName = null
+                                focusedCharacterId = null
                                 showCharactersDialog = true
                             }
                         ) {
                             Icon(Icons.Default.Person, contentDescription = "Characters")
+                        }
+                        TextButton(
+                            onClick = {
+                                viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug)
+                                showCharacterStoreDebugDialog = true
+                            }
+                        ) {
+                            Text("Debug")
                         }
                     }
                 )
@@ -221,6 +248,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                             ParagraphItem(
                                 paragraph = paragraph,
                                 personNotes = uiState.personNotes,
+                                characterRecognitionSettings = uiState.config.characterRecognitionSettings,
                                 onToggle = { viewModel.onEvent(ReaderUiEvent.ToggleTranslation(paragraph.id)) },
                                 onTranslateToHere = {
                                     showBatchTranslationDialog = true
@@ -237,9 +265,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                                     )
                                 },
                                 onCharacterTap = { note ->
-                                    focusedCharacterName = note.name
+                                    focusedCharacterId = note.id
                                     showCharactersDialog = true
                                 },
+                                isHighlighted = highlightedParagraphId == paragraph.id,
                                 onCoordinatesChanged = { coordinates ->
                                     if (coordinates == null) {
                                         paragraphCoordinates.remove(paragraph.id)
@@ -276,8 +305,35 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                     if (showCharactersDialog) {
                         CharactersDialog(
                             personNotes = uiState.personNotes,
-                            focusedCharacterName = focusedCharacterName,
-                            onDismiss = { showCharactersDialog = false }
+                            chapters = uiState.chapters,
+                            focusedCharacterId = focusedCharacterId,
+                            onDismiss = { showCharactersDialog = false },
+                            onSelectCharacter = { focusedCharacterId = it.id },
+                            onOpenDebug = {
+                                viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug)
+                                showCharacterStoreDebugDialog = true
+                            },
+                            onJumpToParagraph = { paragraphId ->
+                                focusedCharacterId = uiState.personNotes.firstOrNull {
+                                    it.mentionParagraphIds.contains(paragraphId)
+                                }?.id ?: focusedCharacterId
+                                viewModel.onEvent(ReaderUiEvent.RevealParagraph(paragraphId))
+                                highlightedParagraphId = paragraphId
+                                scope.launch {
+                                    listState.animateScrollToItem(paragraphId)
+                                }
+                                showCharactersDialog = false
+                            }
+                        )
+                    }
+
+                    if (showCharacterStoreDebugDialog) {
+                        CharacterStoreDebugDialog(
+                            strategyVersion = uiState.characterStoreStrategyVersion,
+                            formattedJson = uiState.characterStoreFormattedJson,
+                            entries = uiState.characterStoreEntries,
+                            onRefresh = { viewModel.onEvent(ReaderUiEvent.RefreshCharacterStoreDebug) },
+                            onDismiss = { showCharacterStoreDebugDialog = false }
                         )
                     }
 
@@ -326,16 +382,18 @@ private fun rememberPopupOffset(
 @Composable
 fun ParagraphItem(
     paragraph: Paragraph,
-    personNotes: List<com.example.transai.model.PersonNote>,
+    personNotes: List<PersonNote>,
+    characterRecognitionSettings: CharacterRecognitionSettings,
     onToggle: () -> Unit,
     onTranslateToHere: () -> Unit,
     onWordTap: (String, Offset) -> Unit,
-    onCharacterTap: (com.example.transai.model.PersonNote) -> Unit,
+    onCharacterTap: (PersonNote) -> Unit,
+    isHighlighted: Boolean,
     onCoordinatesChanged: (LayoutCoordinates?) -> Unit
 ) {
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val annotatedText = remember(paragraph.originalText, personNotes) {
-        buildHighlightedParagraphText(paragraph.originalText, personNotes)
+    val annotatedText = remember(paragraph.originalText, personNotes, characterRecognitionSettings) {
+        buildHighlightedParagraphText(paragraph.originalText, personNotes, characterRecognitionSettings)
     }
     DisposableEffect(Unit) {
         onDispose { onCoordinatesChanged(null) }
@@ -343,6 +401,14 @@ fun ParagraphItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                color = if (isHighlighted) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                shape = MaterialTheme.shapes.medium
+            )
             .padding(4.dp)
     ) {
         Row(verticalAlignment = Alignment.Top) {
@@ -368,7 +434,7 @@ fun ParagraphItem(
                                     .firstOrNull()
                                     ?.let { annotation ->
                                         personNotes.firstOrNull {
-                                            normalizeCharacterName(it.name) == annotation.item
+                                            it.id == annotation.item
                                         }
                                     }
                                 if (characterNote != null) {
@@ -546,20 +612,21 @@ fun isWordChar(char: Char): Boolean {
 
 @Composable
 fun CharactersDialog(
-    personNotes: List<com.example.transai.model.PersonNote>,
-    focusedCharacterName: String?,
-    onDismiss: () -> Unit
+    personNotes: List<PersonNote>,
+    chapters: List<ChapterInfo>,
+    focusedCharacterId: String?,
+    onDismiss: () -> Unit,
+    onSelectCharacter: (PersonNote) -> Unit,
+    onOpenDebug: () -> Unit,
+    onJumpToParagraph: (Int) -> Unit
 ) {
     val listState = rememberLazyListState()
-    val focusedNameKey = remember(focusedCharacterName) {
-        focusedCharacterName?.let(::normalizeCharacterName)
+    val selectedCharacter = remember(personNotes, focusedCharacterId) {
+        personNotes.firstOrNull { it.id == focusedCharacterId } ?: personNotes.firstOrNull()
     }
-    val focusedIndex = remember(personNotes, focusedNameKey) {
-        if (focusedNameKey == null) {
-            -1
-        } else {
-            personNotes.indexOfFirst { normalizeCharacterName(it.name) == focusedNameKey }
-        }
+    val focusedIndex = remember(personNotes, selectedCharacter?.id) {
+        val selectedId = selectedCharacter?.id ?: return@remember -1
+        personNotes.indexOfFirst { it.id == selectedId }
     }
     LaunchedEffect(focusedIndex) {
         if (focusedIndex >= 0) {
@@ -570,47 +637,254 @@ fun CharactersDialog(
         onDismissRequest = onDismiss,
         title = { Text("Characters") },
         text = {
-            if (personNotes.isEmpty()) {
-                Text(
-                    "暂无人物笔记",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.heightIn(max = 360.dp)
-                ) {
-                    itemsIndexed(personNotes) { index, note ->
-                        val isFocused = index == focusedIndex
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    color = if (isFocused) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surface
-                                    },
-                                    shape = MaterialTheme.shapes.small
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (personNotes.isEmpty()) {
+                    Text(
+                        "暂无人物笔记",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.heightIn(max = 220.dp)
+                    ) {
+                        itemsIndexed(personNotes) { index, note ->
+                            val isFocused = index == focusedIndex
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelectCharacter(note) }
+                                    .background(
+                                        color = if (isFocused) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        shape = MaterialTheme.shapes.small
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(note.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(
+                                        "${note.mentionParagraphIds.size} 段",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    note.role,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                .padding(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Text(note.name, style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                note.role,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            }
+                            HorizontalDivider()
                         }
-                        HorizontalDivider()
+                    }
+                    selectedCharacter?.let { character ->
+                        Spacer(modifier = Modifier.height(12.dp))
+                        CharacterDetailContent(
+                            character = character,
+                            chapters = chapters,
+                            onJumpToParagraph = onJumpToParagraph
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onOpenDebug) {
+                        Text("Debug JSON")
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+fun CharacterStoreDebugDialog(
+    strategyVersion: Int,
+    formattedJson: String,
+    entries: List<CharacterStoreDebugEntry>,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    var selectedCharacterId by remember(entries) { mutableStateOf(entries.firstOrNull()?.characterId) }
+    val selectedEntry = remember(entries, selectedCharacterId) {
+        entries.firstOrNull { it.characterId == selectedCharacterId } ?: entries.firstOrNull()
+    }
+    val copyTargetJson = selectedEntry?.formattedJson ?: formattedJson
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Character Store Debug") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "策略版本：$strategyVersion",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "按人物查看",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                if (entries.isEmpty()) {
+                    Text(
+                        "当前没有人物存储数据",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 120.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(8.dp)
+                    ) {
+                        items(entries) { entry ->
+                            val isSelected = entry.characterId == selectedEntry?.characterId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedCharacterId = entry.characterId }
+                                    .background(
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surface
+                                        },
+                                        shape = MaterialTheme.shapes.small
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    entry.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "${entry.mentionCount} 段",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        selectedEntry?.let { "人物 JSON: ${it.displayName}" } ?: "人物 JSON",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SelectionContainer {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 180.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                    shape = MaterialTheme.shapes.small
+                                )
+                                .padding(8.dp)
+                        ) {
+                            item {
+                                Text(
+                                    selectedEntry?.formattedJson ?: "{}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "整份快照 JSON",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                SelectionContainer {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 160.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                shape = MaterialTheme.shapes.small
+                            )
+                            .padding(8.dp)
+                    ) {
+                        item {
+                            Text(
+                                formattedJson,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(copyTargetJson))
+                        }
+                    ) {
+                        Text(if (selectedEntry != null) "复制当前人物 JSON" else "复制当前 JSON")
+                    }
+                    TextButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(formattedJson))
+                        }
+                    ) {
+                        Text("复制完整 JSON")
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onRefresh) {
+                        Text("刷新")
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("关闭")
+                    }
+                }
+            }
         }
     )
 }
@@ -680,19 +954,27 @@ private const val CHARACTER_ANNOTATION_TAG = "character"
 
 private fun buildHighlightedParagraphText(
     text: String,
-    personNotes: List<com.example.transai.model.PersonNote>
+    personNotes: List<PersonNote>,
+    characterRecognitionSettings: CharacterRecognitionSettings
 ): AnnotatedString {
     val candidates = personNotes
-        .mapNotNull { note ->
-            val trimmedName = note.name.trim()
-            if (trimmedName.isBlank()) {
-                null
-            } else {
-                normalizeCharacterName(trimmedName) to trimmedName
+        .flatMap { note ->
+            CharacterRecognitionPolicy.highlightAliases(note, characterRecognitionSettings).mapNotNull { alias ->
+                val trimmedName = alias.trim()
+                val normalizedName = normalizeCharacterName(trimmedName)
+                if (trimmedName.isBlank()) {
+                    null
+                } else {
+                    HighlightCandidate(
+                        characterId = note.id,
+                        normalizedName = normalizedName,
+                        displayName = trimmedName
+                    )
+                }
             }
         }
-        .distinctBy { it.first }
-        .sortedByDescending { it.second.length }
+        .distinctBy { "${it.characterId}_${it.normalizedName}" }
+        .sortedByDescending { it.displayName.length }
 
     if (candidates.isEmpty()) {
         return AnnotatedString(text)
@@ -701,22 +983,21 @@ private fun buildHighlightedParagraphText(
     return buildAnnotatedString {
         var currentIndex = 0
         while (currentIndex < text.length) {
-            val match = candidates.firstOrNull { (_, name) ->
+            val match = candidates.firstOrNull { candidate ->
                 text.regionMatches(
                     thisOffset = currentIndex,
-                    other = name,
+                    other = candidate.displayName,
                     otherOffset = 0,
-                    length = name.length,
+                    length = candidate.displayName.length,
                     ignoreCase = true
-                )
+                ) && isValidHighlightBoundary(text, currentIndex, candidate.displayName.length)
             }
             if (match == null) {
                 append(text[currentIndex])
                 currentIndex++
             } else {
-                val (nameKey, name) = match
-                val nextIndex = currentIndex + name.length
-                pushStringAnnotation(tag = CHARACTER_ANNOTATION_TAG, annotation = nameKey)
+                val nextIndex = currentIndex + match.displayName.length
+                pushStringAnnotation(tag = CHARACTER_ANNOTATION_TAG, annotation = match.characterId)
                 pushStyle(
                     SpanStyle(
                         background = androidx.compose.ui.graphics.Color(0x66FFD54F),
@@ -731,6 +1012,138 @@ private fun buildHighlightedParagraphText(
             }
         }
     }
+}
+
+@Composable
+private fun CharacterDetailContent(
+    character: PersonNote,
+    chapters: List<ChapterInfo>,
+    onJumpToParagraph: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                shape = MaterialTheme.shapes.medium
+            )
+            .padding(12.dp)
+    ) {
+        Text(character.name, style = MaterialTheme.typography.titleLarge)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            character.role,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "出现 ${character.mentionParagraphIds.size} 个段落",
+            style = MaterialTheme.typography.labelLarge
+        )
+        if (character.aliases.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "别名：${character.aliases.joinToString(" / ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            character.mentionParagraphIds.firstOrNull()?.let { firstParagraphId ->
+                AssistChip(
+                    onClick = { onJumpToParagraph(firstParagraphId) },
+                    label = { Text("首次出现") }
+                )
+            }
+            character.mentionParagraphIds.lastOrNull()?.let { latestParagraphId ->
+                AssistChip(
+                    onClick = { onJumpToParagraph(latestParagraphId) },
+                    label = { Text("最近出现") }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("出现记录", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
+            items(character.mentions.sortedBy { it.paragraphId }) { mention ->
+                CharacterMentionRow(
+                    mention = mention,
+                    chapterLabel = chapterLabelForParagraph(mention.paragraphId, chapters),
+                    onJumpToParagraph = onJumpToParagraph
+                )
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun CharacterMentionRow(
+    mention: PersonMention,
+    chapterLabel: String,
+    onJumpToParagraph: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onJumpToParagraph(mention.paragraphId) }
+            .padding(vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                chapterLabel,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                "第 ${mention.paragraphId + 1} 段",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "称呼：${mention.surfaceForm}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            mention.contextSnippet,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun chapterLabelForParagraph(paragraphId: Int, chapters: List<ChapterInfo>): String {
+    return chapters
+        .lastOrNull { it.startIndex <= paragraphId }
+        ?.title
+        ?: "正文"
+}
+
+private data class HighlightCandidate(
+    val characterId: String,
+    val normalizedName: String,
+    val displayName: String
+)
+
+private fun isValidHighlightBoundary(text: String, startIndex: Int, matchLength: Int): Boolean {
+    val beforeChar = text.getOrNull(startIndex - 1)
+    val afterChar = text.getOrNull(startIndex + matchLength)
+    return isBoundaryChar(beforeChar) && isBoundaryChar(afterChar)
+}
+
+private fun isBoundaryChar(char: Char?): Boolean {
+    if (char == null) return true
+    return !char.isLetterOrDigit()
 }
 
 private fun normalizeCharacterName(name: String): String {

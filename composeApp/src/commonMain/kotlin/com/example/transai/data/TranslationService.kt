@@ -1,6 +1,7 @@
 package com.example.transai.data
 
 import com.example.transai.model.PersonNote
+import com.example.transai.model.PersonResolution
 import com.example.transai.model.TranslationConfig
 import com.example.transai.model.WordTranslation
 import com.example.transai.platform.aiProxyEndpoint
@@ -129,19 +130,59 @@ class TranslationService {
         }
     }
 
-    suspend fun extractPersonNotes(text: String, config: TranslationConfig): Result<List<PersonNote>> {
+    suspend fun resolvePersonNotes(
+        text: String,
+        existingCharacters: List<PersonNote>,
+        config: TranslationConfig
+    ): Result<List<PersonResolution>> {
         if (config.apiKey.isBlank()) {
             return Result.failure(Exception("Please set API Key in settings."))
         }
         try {
+            val existingCharactersJson = json.encodeToString(
+                ListSerializer(ExistingCharacterPayload.serializer()),
+                existingCharacters.map { note ->
+                    ExistingCharacterPayload(
+                        id = note.id,
+                        canonicalName = note.name,
+                        aliases = note.aliases,
+                        role = note.role
+                    )
+                }
+            )
             val requestBody = ChatCompletionRequest(
                 model = config.model,
                 messages = listOf(
                     Message(
                         "system",
-                        "You are a literary assistant. Extract only character/person names mentioned in the paragraph. Return a JSON array of objects with fields: name, role. name must keep the original form from the text. role must be a concise Chinese description based on this paragraph. If none, return an empty array."
+                        """
+                        You maintain a novel character encyclopedia.
+                        Extract every explicit person/character mention in the paragraph, including names, full names, titles, identity labels, and nicknames when they clearly point to a person.
+                        Compare each mention against the provided existing character list and merge when they are the same person.
+                        Return only a JSON array. Each item must have:
+                        - matchedCharacterId: existing character id when the mention should merge into an existing character, otherwise null
+                        - canonicalName: best current display name for that person
+                        - aliases: array of alternate names or titles for the same person
+                        - role: concise Chinese role summary based on the paragraph
+                        - surfaceForm: exact mention text from the paragraph
+                        - confidence: number between 0 and 1
+                        Rules:
+                        - Prefer reusing an existing character when the mention is likely the same person.
+                        - If a better full name appears later, keep matchedCharacterId and upgrade canonicalName.
+                        - Do not invent characters that are not supported by the paragraph.
+                        - If there are no people, return [].
+                        """.trimIndent()
                     ),
-                    Message("user", text)
+                    Message(
+                        "user",
+                        """
+                        Existing characters:
+                        $existingCharactersJson
+
+                        Paragraph:
+                        $text
+                        """.trimIndent()
+                    )
                 )
             )
             val endpoint = resolveChatCompletionEndpoint(config)
@@ -166,14 +207,22 @@ class TranslationService {
                 return Result.failure(Exception("Extraction failed: Empty response."))
             }
             val jsonText = extractJsonArray(content)
-            val payloads = json.decodeFromString(ListSerializer(PersonNotePayload.serializer()), jsonText)
+            val payloads = json.decodeFromString(ListSerializer(PersonResolutionPayload.serializer()), jsonText)
             val notes = payloads.mapNotNull { payload ->
-                val name = payload.name.trim()
+                val name = payload.canonicalName.trim()
                 val role = payload.role.trim()
-                if (name.isBlank() || role.isBlank()) {
+                val surfaceForm = payload.surfaceForm.trim()
+                if (name.isBlank() || role.isBlank() || surfaceForm.isBlank()) {
                     null
                 } else {
-                    PersonNote(name = name, role = role, paragraphId = -1)
+                    PersonResolution(
+                        matchedCharacterId = payload.matchedCharacterId?.trim().orEmpty().ifBlank { null },
+                        canonicalName = name,
+                        aliases = payload.aliases.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() },
+                        role = role,
+                        surfaceForm = surfaceForm,
+                        confidence = payload.confidence?.coerceIn(0.0, 1.0) ?: 0.0
+                    )
                 }
             }
             return Result.success(notes)
@@ -259,7 +308,19 @@ data class WordTranslationPayload(
 )
 
 @Serializable
-data class PersonNotePayload(
-    val name: String,
+data class ExistingCharacterPayload(
+    val id: String,
+    val canonicalName: String,
+    val aliases: List<String>,
     val role: String
+)
+
+@Serializable
+data class PersonResolutionPayload(
+    val matchedCharacterId: String? = null,
+    val canonicalName: String,
+    val aliases: List<String> = emptyList(),
+    val role: String,
+    val surfaceForm: String,
+    val confidence: Double? = null
 )
