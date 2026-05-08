@@ -6,6 +6,75 @@
 
 ---
 
+## 先看这个：部署流程
+
+如果你现在的目标是把 Web 版正式部署到 `EdgeOne Pages`，直接按下面顺序做。
+
+### 1. 本地重新生成部署产物
+
+```bash
+TRANSAI_WEB_FILING_NUMBER="京ICP备2026024685号" ./prepare-web-dist.sh
+```
+
+说明：
+
+- 这一步会重新构建 Web 版本
+- 输出目录是 `dist/`
+- 当前默认代理仍然是 `/api/chat/completions`
+- 备案号会自动写入 Web 底部
+
+如果后续拿到公安联网备案号，再用下面这条重新构建：
+
+```bash
+TRANSAI_WEB_FILING_NUMBER="京ICP备2026024685号" \
+TRANSAI_WEB_PUBLIC_SECURITY_FILING="你的公安备案号" \
+TRANSAI_WEB_PUBLIC_SECURITY_FILING_URL="你的公安备案详情链接" \
+./prepare-web-dist.sh
+```
+
+### 2. 提交并推送代码
+
+```bash
+git add .
+git commit -m "feat: update edgeone deployment flow"
+git push origin master
+```
+
+### 3. 到 EdgeOne Pages 控制台部署
+
+- 控制台地址：https://console.cloud.tencent.com/edgeone/pages
+- 打开项目 `transai2`
+- 确认生产分支是 `master`
+- 触发最新一次部署，或等待推送后自动部署
+
+### 4. 绑定正式域名
+
+- 进入 `域名管理`
+- 添加自定义域名：`www.swithun.cn`
+- 环境选择：`生产`
+- 按页面提示获取 `CNAME` 记录值
+
+### 5. 到腾讯云 DNS 里加解析
+
+- 主机记录：`www`
+- 记录类型：`CNAME`
+- 记录值：填写 `EdgeOne` 给你的目标地址
+- 等待域名状态变成 `已生效`
+
+### 6. 上线后检查
+
+- `https://www.swithun.cn` 可以正常打开
+- EPUB 可以导入
+- AI 翻译正常
+- 页面底部已显示 `京ICP备2026024685号`
+
+### 7. 后续必须做的事
+
+- 网站开通后 30 天内完成公安联网备案
+- 拿到公安备案号后，再执行一次 `./prepare-web-dist.sh` 把公安备案号补到底部
+
+---
+
 ## 🚀 核心功能
 
 - **跨平台支持**: Android, iOS, Desktop, Web
@@ -118,6 +187,7 @@
 ### 部署地址
 - **GitHub**: https://github.com/swithun-liu/transai2
 - **生产环境**: 由你的 EdgeOne Pages 项目分配
+- **EdgeOne Pages 控制台**: https://console.cloud.tencent.com/edgeone/pages
 
 ### 🚀 当前推荐流程
 
