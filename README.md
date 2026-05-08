@@ -28,7 +28,7 @@
 
 ## 🌐 Web 版本在线体验
 
-**生产环境**: 当前准备迁移到 EdgeOne Pages，线上域名待新的 EdgeOne 项目创建后补充
+**生产环境**: 备案已通过，当前推荐绑定正式域名 `www.swithun.cn`
 
 ### Web AI 请求说明
 - Web 端 AI 请求不会直接从浏览器访问第三方模型接口
@@ -152,6 +152,28 @@
 4. 保持 `edgeone.json` 生效
 5. 部署完成后访问 EdgeOne 提供的默认域名
 
+### 正式域名与备案号
+
+推荐先绑定已备案通过的正式域名：
+
+- `www.swithun.cn`
+
+Web 入口已经支持通过运行时配置自动悬挂备案信息，无需手改业务代码。构建前可按需注入：
+
+```bash
+TRANSAI_WEB_FILING_NUMBER="京ICP备xxxxxxxx号" \
+TRANSAI_WEB_PUBLIC_SECURITY_FILING="京公网安备xxxxxxxx号" \
+TRANSAI_WEB_PUBLIC_SECURITY_FILING_URL="https://beian.mps.gov.cn/#/query/webSearch?code=你的公安备案号" \
+./prepare-web-dist.sh
+```
+
+说明：
+
+- `TRANSAI_WEB_FILING_NUMBER`：工信部 ICP 备案号，构建后会自动显示在网站底部并链接到 `https://beian.miit.gov.cn/`
+- `TRANSAI_WEB_PUBLIC_SECURITY_FILING`：公安联网备案号，可暂时留空，拿到后再补
+- `TRANSAI_WEB_PUBLIC_SECURITY_FILING_URL`：公安联网备案详情链接，可暂时留空
+- 若不传以上环境变量，站点底部不会显示备案信息
+
 ### 🌐 运行时代理地址
 
 Web 端支持运行时注入代理地址，优先级如下：
@@ -177,6 +199,7 @@ TRANSAI_WEB_AI_PROXY_URL=https://your-proxy-url \
 6. 验证 `翻译到此` 是否只补齐未翻译段落，且请求为串行发送
 7. 验证顶部 `进度` 弹窗是否能显示后台翻译进度
 8. 验证人物高亮、点击人物后角色列表展开与定位是否正常
+9. 若已注入备案号，验证底部 ICP 链接可点击且能打开工信部官网
 9. 验证 EPUB 目录是否显示完整章节名，且正文不再混入目录页内容
 
 ### 🔧 特殊情况处理
@@ -192,6 +215,14 @@ rm -rf build kotlin-js-store dist
 - `deploy-vercel.sh` 已废弃，仅保留为提示脚本
 - `api/chat/completions.js` 是旧的 Vercel 代理实现
 - 当前推荐使用 `functions/api/chat/completions.js`
+
+### 备案通过后还需要做什么
+
+1. 在 `EdgeOne Pages -> 域名管理` 中添加 `www.swithun.cn`
+2. 按 `EdgeOne` 提示在腾讯云 DNSPod 中添加 `CNAME`
+3. 等待域名状态变为 `已生效`
+4. 重新构建 `dist/` 时注入正式 ICP 备案号
+5. 网站开通后 30 天内完成公安联网备案，并拿到公安备案号后再次构建补到底部
 
 ### 🎯 部署验证清单
 

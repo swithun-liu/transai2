@@ -5,10 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TransAI Reader</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        html, body {
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: #071321;
+        }
+
+        #composeApp {
+            min-height: 100vh;
+        }
+
+        .site-filing {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 16px 20px 28px;
+            text-align: center;
+            font: 12px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: rgba(255, 255, 255, 0.64);
+            background: #071321;
+        }
+
+        .site-filing a {
+            color: rgba(255, 255, 255, 0.82);
+            text-decoration: none;
+        }
+
+        .site-filing a:hover {
+            text-decoration: underline;
+        }
+
+        .site-filing__row + .site-filing__row {
+            margin-top: 6px;
+        }
+    </style>
 </head>
 <body>
     <div id="composeApp"></div>
+    <footer id="siteFiling" class="site-filing" hidden></footer>
     <script src="runtime-config.js"></script>
+    <script>
+        (function () {
+            var config = window.TRANSAI_RUNTIME_CONFIG || {};
+            var footer = document.getElementById("siteFiling");
+            if (!footer) return;
+
+            var filingNumber = typeof config.filingNumber === "string" ? config.filingNumber.trim() : "";
+            var publicSecurityText = typeof config.publicSecurityFiling === "string" ? config.publicSecurityFiling.trim() : "";
+            var publicSecurityUrl = typeof config.publicSecurityFilingUrl === "string" ? config.publicSecurityFilingUrl.trim() : "";
+
+            if (!filingNumber && !publicSecurityText) {
+                return;
+            }
+
+            var rows = [];
+            if (filingNumber) {
+                rows.push(
+                    '<div class="site-filing__row"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">' +
+                    filingNumber +
+                    "</a></div>"
+                );
+            }
+
+            if (publicSecurityText) {
+                var publicSecurityContent = publicSecurityUrl
+                    ? '<a href="' + publicSecurityUrl + '" target="_blank" rel="noreferrer">' + publicSecurityText + "</a>"
+                    : publicSecurityText;
+                rows.push('<div class="site-filing__row">' + publicSecurityContent + "</div>");
+            }
+
+            footer.innerHTML = rows.join("");
+            footer.hidden = false;
+        })();
+    </script>
     <script src="composeApp.js"></script>
 </body>
 </html>
