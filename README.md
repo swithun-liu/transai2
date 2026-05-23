@@ -36,7 +36,7 @@ TRANSAI_WEB_PUBLIC_SECURITY_FILING_URL="你的公安备案详情链接" \
 
 ```bash
 git add .
-git commit -m "feat: update edgeone deployment flow"
+git commit -m "xxx"
 git push origin master
 ```
 
